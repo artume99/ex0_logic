@@ -415,11 +415,11 @@ class Proof:
         """
         assert line_number < len(self.lines)
         line = self.lines[line_number]
-        if line.is_assumption():
+        if line.is_assumption():  # No rule for this line
             return None
         assumptions = []
         for assumption in line.assumptions:
-            assumptions.append(self.lines[assumption].formula)
+            assumptions.append(self.lines[assumption].formula)  # Taking the assumptions from previous lines
         conclusion = line.formula
         return InferenceRule(assumptions, conclusion)
 
@@ -472,9 +472,10 @@ class Proof:
         for line in range(len(self.lines)):
             if not self.is_line_valid(line):
                 return False
-        if not self.lines:
+        if not self.lines:  # No lines in the proof
             return False
-        if self.rule_for_line(len(self.lines)-1).conclusion != self.statement.conclusion:
+        if self.rule_for_line(len(self.lines)-1).conclusion != self.statement.conclusion:  # Checks if we reached the
+            # conclusion at the end of the proof
             return False
         return True
         # Task 4.6c

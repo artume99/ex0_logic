@@ -12,6 +12,7 @@ from propositions.syntax import *
 from propositions.semantics import *
 from propositions.proofs import *
 
+
 def rule_nonsoundness_from_specialization_nonsoundness(
         general: InferenceRule, specialization: InferenceRule, model: Model) \
         -> Model:
@@ -29,7 +30,14 @@ def rule_nonsoundness_from_specialization_nonsoundness(
     """
     assert specialization.is_specialization_of(general)
     assert not evaluate_inference(specialization, model)
+    spec_map = InferenceRule.specialization_map(general, specialization)
+    counter_model = {}
+    for gen, spec in spec_map.items():  # Loop over the map use the formula of the specialize rule to evaluate the
+        # value of the general formula, this should give us a counter example
+        counter_model.update({gen: evaluate(spec, model)})
+    return counter_model
     # Task 4.9
+
 
 def nonsound_rule_of_nonsound_proof(proof: Proof, model: Model) -> \
         Tuple[InferenceRule, Model]:
@@ -48,4 +56,17 @@ def nonsound_rule_of_nonsound_proof(proof: Proof, model: Model) -> \
     """
     assert proof.is_valid()
     assert not evaluate_inference(proof.statement, model)
+    counter_model = {}
+    counter_inference_rule = None
+    for line_number, line in enumerate(proof.lines):
+        # Loop over the lines and check if each line rule is true. if we meet a bad line (by the given model),
+        # find the counter model example from the previous method.
+        line_rule = proof.rule_for_line(line_number)
+        if line_rule is None:
+            continue
+        if not evaluate_inference(line_rule, model):
+            counter_model = rule_nonsoundness_from_specialization_nonsoundness(line.rule, line_rule, model)
+            counter_inference_rule = line.rule
+    return counter_inference_rule, counter_model
+
     # Task 4.10
