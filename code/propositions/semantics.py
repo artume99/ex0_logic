@@ -53,6 +53,10 @@ PARAMETER_TO_ACTION = {'T': True,
                        '&': lambda first, second: first and second,
                        '|': lambda first, second: first or second,
                        '->': lambda first, second: (not first) or second,
+                       '+': lambda first, second: first ^ second,
+                       '<->': lambda first, second: (first and second) or (not first and not second),
+                       '-&': lambda first, second: not PARAMETER_TO_ACTION.get('&')(first, second),
+                       '-|': lambda first, second: not PARAMETER_TO_ACTION.get('|')(first, second),
                        '~': lambda first: not first}
 
 

@@ -66,9 +66,9 @@ def is_binary(string: str) -> bool:
     Returns:
         ``True`` if the given string is a binary operator, ``False`` otherwise.
     """
-    return string == '&' or string == '|' or string == '->'
+    # return string == '&' or string == '|' or string == '->'
     # For Chapter 3:
-    # return string in {'&', '|',  '->', '+', '<->', '-&', '-|'}
+    return string in {'&', '|', '->', '+', '<->', '-&', '-|'}
 
 
 def root_check(string: str):
@@ -82,6 +82,9 @@ def root_check(string: str):
     if root == '-' and len(string) >= 2:
         root = string[0:2]
         new_string = string[1:]
+    if root == '<' and len(string) >= 3:
+        root = string[0:3]
+        new_string = string[2:]
     return root, new_string
 
 
@@ -368,7 +371,21 @@ class Formula:
         """
         for variable in substitution_map:
             assert is_variable(variable)
-        # Task 3.3
+
+        if self.root in substitution_map:  # Checks if the current root needs to be replaced
+            sub_formula = substitution_map[self.root]
+            if is_binary(sub_formula.root):
+                return Formula(sub_formula.root, sub_formula.first, sub_formula.second)
+            elif is_unary(sub_formula.root):
+                return Formula(sub_formula.root, sub_formula.first)
+            else:
+                return Formula(sub_formula.root)
+        if is_binary(self.root):
+            return Formula(self.root, self.first.substitute_variables(substitution_map),
+                           self.second.substitute_variables(substitution_map))
+        if is_unary(self.root):
+            return Formula(self.root, self.first.substitute_variables(substitution_map))
+        return self
 
     def substitute_operators(self, substitution_map: Mapping[str, Formula]) -> \
             Formula:
@@ -397,4 +414,64 @@ class Formula:
             assert is_binary(operator) or is_unary(operator) or \
                    is_constant(operator)
             assert substitution_map[operator].variables().issubset({'p', 'q'})
+
+        if self.root in substitution_map:
+            if is_binary(self.root):
+                return self.handle_binary_operator_switch(substitution_map)
+            elif is_unary(self.root):
+                return self.handle_unary_operation_switch(substitution_map)
+            else:
+                return self.handle_constant_operation_switch(substitution_map)
+
+            # Recursion on the formula until we find the operator to substitute
+        elif is_binary(self.root):
+            return Formula(self.root, self.first.substitute_operators(substitution_map),
+                           self.second.substitute_operators(substitution_map))
+        elif is_unary(self.root):
+            return Formula(self.root, self.first.substitute_operators(substitution_map))
+        return self
         # Task 3.4
+
+    def handle_binary_operator_switch(self, substitution_map):
+        """
+        Returns the formula after the binary operation have been switched
+        :param substitution_map:  the substitution map
+        :return: new replaced formula
+        """
+        sub_formula = substitution_map[self.root]
+        if is_binary(sub_formula.root):
+            sub_dict_first = {'p': self.first.substitute_operators(substitution_map),
+                              'q': self.second.substitute_operators(substitution_map)}
+            return Formula(sub_formula.root, sub_formula.first.substitute_variables(sub_dict_first),
+                           sub_formula.second.substitute_variables(sub_dict_first))
+        elif is_unary(sub_formula.root):
+            sub_dict_first = {'p': self.first.substitute_operators(substitution_map),
+                              'q': self.second.substitute_operators(substitution_map)}
+            return Formula(sub_formula.root, sub_formula.first.substitute_variables(sub_dict_first))
+
+    def handle_unary_operation_switch(self, substitution_map):
+        """
+                Returns the formula after the unary operation have been switched
+                :param substitution_map:  the substitution map
+                :return: new replaced formula
+                """
+        sub_formula = substitution_map[self.root]
+        if is_binary(sub_formula.root):
+            sub_dict_first = {'p': self.first.substitute_operators(substitution_map)}
+            return Formula(sub_formula.root, sub_formula.first.substitute_variables(sub_dict_first),
+                           sub_formula.second.substitute_variables(sub_dict_first))
+        elif is_unary(sub_formula.root):
+            sub_dict_first = {'p': self.first.substitute_operators(substitution_map)}
+            return Formula(sub_formula.root, sub_formula.first.substitute_variables(sub_dict_first))
+
+    def handle_constant_operation_switch(self, substitution_map):
+        """
+                Returns the formula after the constant operation have been switched
+                :param substitution_map:  the substitution map
+                :return: new replaced formula
+                """
+        sub_formula = substitution_map[self.root]
+        if is_binary(sub_formula.root):
+            return Formula(sub_formula.root, sub_formula.first, sub_formula.second)
+        elif is_unary(sub_formula.root):
+            return Formula(sub_formula.root, sub_formula.first)
