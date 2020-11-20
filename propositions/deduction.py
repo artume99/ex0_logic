@@ -44,15 +44,15 @@ def prove_corollary(antecedent_proof: Proof, consequent: Formula,
     line1 = Proof.Line(conditional.conclusion, conditional, [])
     line2 = Proof.Line(conditional.conclusion.second, MP, [0, 1])
     lines = [line0, line1, line2]
-    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent_proof.lines)-1])
+    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent_proof.lines) - 1])  # Not sure about
+    # the -1, but take the last line and put it as assumption in the line
     sub_lines = list(antecedent_proof.lines)
     sub_lines.append(sub_line)
-    proof = Proof(statement, rules, sub_lines)
 
-    lemma = Proof(lemma_statement, rules, lines)
-    print("lemma",lemma, "proof", proof)
-    print(inline_proof(proof, lemma))
-    return inline_proof(proof, lemma)
+    proof = Proof(statement, rules, sub_lines)  # Proof contains the original proof + lemma
+    lemma = Proof(lemma_statement, rules, lines)  # Proof of the lemma
+
+    return inline_proof(proof, lemma)  # Insert the lemma into the proof
     # Task 5.3a
 
 
@@ -89,6 +89,33 @@ def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
         [], Formula('->', antecedent1_proof.statement.conclusion,
                     Formula('->', antecedent2_proof.statement.conclusion, consequent))
     ).is_specialization_of(double_conditional)
+
+    lemma_statement = InferenceRule([double_conditional.conclusion.first, double_conditional.conclusion.second.first],
+                                    double_conditional.conclusion.second.second)
+    statement_assumptions = antecedent1_proof.statement.assumptions
+    statement_conclusion = consequent
+    statement = InferenceRule(statement_assumptions, statement_conclusion)
+
+    rules = antecedent1_proof.rules.union({double_conditional, MP, lemma_statement})
+    line0 = Proof.Line(double_conditional.conclusion.first)
+    line1 = Proof.Line(double_conditional.conclusion, double_conditional, [])
+    line2 = Proof.Line(double_conditional.conclusion.second, MP, [0, 1])
+    line3 = Proof.Line(double_conditional.conclusion.second.first)
+    line4 = Proof.Line(double_conditional.conclusion.second.second, MP, [3, 2])
+    lines = [line0, line1, line2, line3, line4]
+    lemma = Proof(lemma_statement, rules, lines)
+
+    sub_lines = list(antecedent1_proof.lines) + list(antecedent2_proof.lines)
+    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(sub_lines) - 2,
+                                                                  len(sub_lines) - 1])  # Not sure about
+    # the -1, but take the last line and put it as assumption in the line
+    sub_lines.append(sub_line)
+
+    proof = Proof(statement, rules, sub_lines)  # Proof contains the original proof + lemma
+    print("lemma",lemma,"proof",proof)
+    print(inline_proof(proof, lemma))
+    return inline_proof(proof, lemma)
+
     # Task 5.3b
 
 
