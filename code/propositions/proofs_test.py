@@ -249,6 +249,7 @@ def test_is_specialization_of(debug=False):
         candidate = InferenceRule(assumptions, conclusion)
         if debug:
             print('Testing whether', candidate, 'is a special case of', rule)
+
         assert candidate.is_specialization_of(rule) == value
             
     # Test 4

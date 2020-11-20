@@ -10,6 +10,7 @@ from propositions.syntax import *
 from propositions.proofs import *
 from propositions.axiomatic_systems import *
 
+
 def prove_corollary(antecedent_proof: Proof, consequent: Formula,
                     conditional: InferenceRule) -> Proof:
     """Converts the given proof of a formula `antecedent` to a proof of the
@@ -34,7 +35,26 @@ def prove_corollary(antecedent_proof: Proof, consequent: Formula,
     assert InferenceRule([],
                          Formula('->', antecedent_proof.statement.conclusion,
                                  consequent)).is_specialization_of(conditional)
+    statement_assumptions = antecedent_proof.statement.assumptions
+    statement_conclusion = consequent
+    lemma_statement = InferenceRule([conditional.conclusion.first], conditional.conclusion.second)
+    statement = InferenceRule(statement_assumptions, statement_conclusion)
+    rules = antecedent_proof.rules.union({conditional, MP, lemma_statement})
+    line0 = Proof.Line(conditional.conclusion.first)
+    line1 = Proof.Line(conditional.conclusion, conditional, [])
+    line2 = Proof.Line(conditional.conclusion.second, MP, [0, 1])
+    lines = [line0, line1, line2]
+    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent_proof.lines)-1])
+    sub_lines = list(antecedent_proof.lines)
+    sub_lines.append(sub_line)
+    proof = Proof(statement, rules, sub_lines)
+
+    lemma = Proof(lemma_statement, rules, lines)
+    print("lemma",lemma, "proof", proof)
+    print(inline_proof(proof, lemma))
+    return inline_proof(proof, lemma)
     # Task 5.3a
+
 
 def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
                    consequent: Formula, double_conditional: InferenceRule) -> \
@@ -67,9 +87,10 @@ def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
     assert antecedent1_proof.rules == antecedent2_proof.rules
     assert InferenceRule(
         [], Formula('->', antecedent1_proof.statement.conclusion,
-        Formula('->', antecedent2_proof.statement.conclusion, consequent))
-        ).is_specialization_of(double_conditional)
+                    Formula('->', antecedent2_proof.statement.conclusion, consequent))
+    ).is_specialization_of(double_conditional)
     # Task 5.3b
+
 
 def remove_assumption(proof: Proof) -> Proof:
     """Converts the given proof of some `conclusion` formula, the last
@@ -90,12 +111,13 @@ def remove_assumption(proof: Proof) -> Proof:
         `~propositions.axiomatic_systems.I0`,
         `~propositions.axiomatic_systems.I1`, and
         `~propositions.axiomatic_systems.D`.
-    """        
+    """
     assert proof.is_valid()
     assert len(proof.statement.assumptions) > 0
     for rule in proof.rules:
         assert rule == MP or len(rule.assumptions) == 0
     # Task 5.4
+
 
 def prove_from_opposites(proof_of_affirmation: Proof,
                          proof_of_negation: Proof, conclusion: Formula) -> \
@@ -122,6 +144,7 @@ def prove_from_opposites(proof_of_affirmation: Proof,
            proof_of_negation.statement.conclusion
     assert proof_of_affirmation.rules == proof_of_negation.rules
     # Task 5.6
+
 
 def prove_by_way_of_contradiction(proof: Proof) -> Proof:
     """Converts the given proof of ``'~(p->p)'``, the last assumption of which
