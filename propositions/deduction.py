@@ -9,6 +9,7 @@ from propositions.proofs import _inline_proof_once
 from propositions.syntax import *
 from propositions.proofs import *
 from propositions.axiomatic_systems import *
+from itertools import chain
 
 
 def lemma_for_corollary(conditional: InferenceRule, rules) -> Proof:
@@ -234,22 +235,6 @@ def remove_assumption(proof: Proof) -> Proof:
     # Task 5.4
 
 
-def push_proof_lines(proof: Proof, line_pushed: int, lines: list) -> list:
-    new_lines = list(proof.lines[:line_pushed])
-    new_lines += lines
-    last_proof_line = len(lines)
-    for line in proof.lines[line_pushed + 1:]:
-        if line.is_assumption():
-            new_lines.append(line)
-            continue
-        assumptions = []
-        for assumption in line.assumptions:
-            assumptions.append(assumption + last_proof_line - 1) if line_pushed <= assumption else assumptions.append(
-                assumption)
-        new_lines.append(Proof.Line(line.formula, line.rule, assumptions))
-    return new_lines
-
-
 def prove_from_opposites(proof_of_affirmation: Proof,
                          proof_of_negation: Proof, conclusion: Formula) -> \
         Proof:
@@ -274,6 +259,28 @@ def prove_from_opposites(proof_of_affirmation: Proof,
     assert Formula('~', proof_of_affirmation.statement.conclusion) == \
            proof_of_negation.statement.conclusion
     assert proof_of_affirmation.rules == proof_of_negation.rules
+
+    statement_assumptions = proof_of_affirmation.statement.assumptions
+    statement = InferenceRule(statement_assumptions, conclusion)
+    rules = proof_of_negation.rules.union(proof_of_affirmation.rules.union({I2, MP}))
+    lines = list(proof_of_affirmation.lines)
+    end_of_aff_proof = len(lines)
+    for line in proof_of_negation.lines:
+        if line.is_assumption():
+            lines.append(line)
+        else:
+            assumptions = []
+            for assumption in line.assumptions:
+                assumptions.append(assumption + end_of_aff_proof)
+            lines.append(Proof.Line(line.formula, line.rule, assumptions))
+    end_of_neg_proof = len(lines) - 1
+    line1 = Proof.Line(I2.specialize({'p': proof_of_affirmation.statement.conclusion, 'q': conclusion}).conclusion, I2,
+                       [])
+    line2 = Proof.Line(line1.formula.second, MP, [end_of_neg_proof, end_of_neg_proof + 1])
+    line3 = Proof.Line(conclusion, MP, [end_of_aff_proof - 1, end_of_neg_proof + 2])
+    lines.extend([line1, line2, line3])
+    return Proof(statement, rules, lines)
+
     # Task 5.6
 
 
@@ -303,4 +310,21 @@ def prove_by_way_of_contradiction(proof: Proof) -> Proof:
     assert proof.statement.assumptions[-1].root == '~'
     for rule in proof.rules:
         assert rule == MP or len(rule.assumptions) == 0
+    new_proof = remove_assumption(proof)
+    to_prove = Formula.parse(str(proof.statement.assumptions[-1]).replace("~", "", 1))
+    statement = InferenceRule(new_proof.statement.assumptions, to_prove)
+    rules = new_proof.rules.union({N, NI})
+    end_of_proof = len(new_proof.lines) - 1
+
+    line1 = Proof.Line(N.specialize({'p': Formula.parse(str(proof.statement.conclusion).replace("~", "", 1)),
+                                     'q': Formula.parse(
+                                         str(proof.statement.assumptions[-1]).replace("~", "", 1))}).conclusion, N, [])
+    line2 = Proof.Line(line1.formula.second, MP, [end_of_proof, end_of_proof + 1])
+    line3 = Proof.Line(Formula.parse("(p->p)"), I0, [])
+    line4 = Proof.Line(MP.specialize({'p': Formula.parse("(p->p)"), 'q': to_prove}).conclusion, MP,
+                       [end_of_proof + 3, end_of_proof + 2])
+    lines = list(new_proof.lines)
+
+    lines.extend([line1, line2, line3, line4])
+    return Proof(statement, rules, lines)
     # Task 5.7
