@@ -5,10 +5,33 @@
 # File name: propositions/deduction.py
 
 """Useful proof manipulation maneuvers in Propositional Logic."""
-
+from propositions.proofs import _inline_proof_once
 from propositions.syntax import *
 from propositions.proofs import *
 from propositions.axiomatic_systems import *
+
+
+def lemma_for_corollary(conditional: InferenceRule, rules) -> Proof:
+    lemma_statement = InferenceRule([conditional.conclusion.first], conditional.conclusion.second)
+    line0 = Proof.Line(conditional.conclusion.first)
+    line1 = Proof.Line(conditional.conclusion, conditional, [])
+    line2 = Proof.Line(conditional.conclusion.second, MP, [0, 1])
+    lines = [line0, line1, line2]
+    lemma = Proof(lemma_statement, rules, lines)
+    return lemma
+
+
+def lemma_for_combine(double_conditional, rules) -> Proof:
+    lemma_statement = InferenceRule([double_conditional.conclusion.first, double_conditional.conclusion.second.first],
+                                    double_conditional.conclusion.second.second)
+    line0 = Proof.Line(double_conditional.conclusion.first)
+    line1 = Proof.Line(double_conditional.conclusion, double_conditional, [])
+    line2 = Proof.Line(double_conditional.conclusion.second, MP, [0, 1])
+    line3 = Proof.Line(double_conditional.conclusion.second.first)
+    line4 = Proof.Line(double_conditional.conclusion.second.second, MP, [3, 2])
+    lines = [line0, line1, line2, line3, line4]
+    lemma = Proof(lemma_statement, rules, lines)
+    return lemma
 
 
 def prove_corollary(antecedent_proof: Proof, consequent: Formula,
@@ -40,19 +63,14 @@ def prove_corollary(antecedent_proof: Proof, consequent: Formula,
     lemma_statement = InferenceRule([conditional.conclusion.first], conditional.conclusion.second)
     statement = InferenceRule(statement_assumptions, statement_conclusion)
     rules = antecedent_proof.rules.union({conditional, MP, lemma_statement})
-    line0 = Proof.Line(conditional.conclusion.first)
-    line1 = Proof.Line(conditional.conclusion, conditional, [])
-    line2 = Proof.Line(conditional.conclusion.second, MP, [0, 1])
-    lines = [line0, line1, line2]
-    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent_proof.lines) - 1])  # Not sure about
-    # the -1, but take the last line and put it as assumption in the line
+
+    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent_proof.lines) - 1])
     sub_lines = list(antecedent_proof.lines)
     sub_lines.append(sub_line)
+    proof = Proof(statement, rules, sub_lines)
 
-    proof = Proof(statement, rules, sub_lines)  # Proof contains the original proof + lemma
-    lemma = Proof(lemma_statement, rules, lines)  # Proof of the lemma
-
-    return inline_proof(proof, lemma)  # Insert the lemma into the proof
+    lemma = lemma_for_corollary(conditional, rules)
+    return inline_proof(proof, lemma)
     # Task 5.3a
 
 
@@ -95,30 +113,68 @@ def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
     statement_assumptions = antecedent1_proof.statement.assumptions
     statement_conclusion = consequent
     statement = InferenceRule(statement_assumptions, statement_conclusion)
-
     rules = antecedent1_proof.rules.union({double_conditional, MP, lemma_statement})
-    line0 = Proof.Line(double_conditional.conclusion.first)
-    line1 = Proof.Line(double_conditional.conclusion, double_conditional, [])
-    line2 = Proof.Line(double_conditional.conclusion.second, MP, [0, 1])
-    line3 = Proof.Line(double_conditional.conclusion.second.first)
-    line4 = Proof.Line(double_conditional.conclusion.second.second, MP, [3, 2])
-    lines = [line0, line1, line2, line3, line4]
-    lemma = Proof(lemma_statement, rules, lines)
 
-    sub_lines = list(antecedent1_proof.lines) + list(antecedent2_proof.lines)
-    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(sub_lines) - 2,
-                                                                  len(sub_lines) - 1])  # Not sure about
-    # the -1, but take the last line and put it as assumption in the line
+    lemma = lemma_for_combine(double_conditional, rules)
+
+    # Adding the assumption of the second proof, the statement of the second proof and merging both proofs
+    sub_lines1 = list(antecedent1_proof.lines)
+    sub_line_assumption = Proof.Line(antecedent2_proof.statement.assumptions[-1])
+    sub_lines1.append(sub_line_assumption)
+    sub_line1 = Proof.Line(antecedent2_proof.statement.conclusion, antecedent2_proof.statement,
+                           [len(sub_lines1) - 2, len(sub_lines1) - 1]) if len(
+        antecedent1_proof.statement.assumptions) > 1 else Proof.Line(antecedent2_proof.statement.conclusion,
+                                                                     antecedent2_proof.statement,
+                                                                     [len(sub_lines1) - 1])
+    sub_lines1.append(sub_line1)
+    proof1 = Proof(statement, rules, sub_lines1)
+    proof = inline_proof(proof1, antecedent2_proof)
+
+    # Adding the statement of the lemma and merging the proofs
+    sub_lines = list(proof.lines)
+    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent1_proof.lines) - 1,
+                                                                  len(antecedent1_proof.lines) + len(
+                                                                      antecedent2_proof.lines) - 1])
     sub_lines.append(sub_line)
 
-    proof = Proof(statement, rules, sub_lines)  # Proof contains the original proof + lemma
-    print("lemma",lemma,"proof",proof)
-    print(inline_proof(proof, lemma))
+    proof = Proof(proof.statement, proof.rules, sub_lines)
     return inline_proof(proof, lemma)
-
     # Task 5.3b
 
 
+def _case1(line: Proof.Line) -> Proof.Line:
+    return Proof.Line(Formula.parse('({assm}->{assm})'.format(assm=line.formula)), I0, [])
+
+
+def _case2(line: Proof.Line, assumption_to_remove: Formula, line_number: int) -> List:
+    line1 = line
+    line2 = Proof.Line(
+        Formula.parse("({line1}->({assm}->{line1}))".format(line1=line1.formula, assm=assumption_to_remove)),
+        I1, [])
+    line3 = Proof.Line(Formula.parse("({assm}->{line1})".format(line1=line1.formula, assm=assumption_to_remove)),
+                       MP, [line_number, line_number + 1])
+    return [line1, line2, line3]
+
+
+def _case3(line, line_dic, assumption_to_remove, lines, num, offset):
+    lemma_assumptions = []
+    for assumption in line.assumptions:
+        lemma_assumptions.append(line_dic[assumption])
+    line1 = Proof.Line((D.specialize(
+        {'p': assumption_to_remove, 'q': lines[lemma_assumptions[0]].formula.second,
+         'r': lines[lemma_assumptions[1]].formula.second.second}).conclusion), D, [])
+    line2 = Proof.Line(Formula.parse(
+        "({first}->({assm}->{sec}))".format(first=lines[lemma_assumptions[0]].formula,
+                                            assm=assumption_to_remove,
+                                            sec=lines[lemma_assumptions[1]].formula.second.second)), MP,
+        [lemma_assumptions[1], num + offset])
+    line3 = Proof.Line(Formula.parse("({assm}->{con})".format(assm=assumption_to_remove, con=line.formula)), MP,
+                       [lemma_assumptions[0], num + offset + 1])
+    return [line1, line2, line3]
+
+
+# def _case3(line: Proof.Line, assumption_to_remove: Formula, line_number:int) -> List:
+#     line1 = Proof.Line(D.specialize({'p': str(assumption_to_remove), 'q':str()}))
 def remove_assumption(proof: Proof) -> Proof:
     """Converts the given proof of some `conclusion` formula, the last
     assumption of which is an assumption `assumption`, to a proof of
@@ -143,7 +199,55 @@ def remove_assumption(proof: Proof) -> Proof:
     assert len(proof.statement.assumptions) > 0
     for rule in proof.rules:
         assert rule == MP or len(rule.assumptions) == 0
+    rules = proof.rules.union({MP, I0, I1, D})
+    assumption_to_remove = proof.statement.assumptions[-1]
+    statement_assumptions = proof.statement.assumptions[:-1]
+    statement_conclusion = Formula.parse(
+        "({assm}->{con})".format(assm=assumption_to_remove, con=proof.statement.conclusion))
+    statement = InferenceRule(statement_assumptions, statement_conclusion)
+    lines = []
+    line_dic = {}
+    offset = 0
+    for num, line in enumerate(proof.lines):
+        if line.formula == assumption_to_remove:
+            # case 1
+            new_line = _case1(line)
+            lines.append(new_line)
+            line_dic.update({num: num + offset})
+            continue
+        elif line.formula in statement_assumptions or not line.rule.assumptions:
+            # case 2
+            new_lines = _case2(line, assumption_to_remove, num + offset)
+            lines += new_lines
+            offset += 2
+            line_dic.update({num: num + offset})
+            pass
+        elif line.rule is MP:
+            # case 3
+            new_lines = _case3(line, line_dic, assumption_to_remove, lines, num, offset)
+            offset += 2
+            lines += new_lines
+            line_dic.update({num: num + offset})
+            pass
+
+    return Proof(statement, rules, lines)
     # Task 5.4
+
+
+def push_proof_lines(proof: Proof, line_pushed: int, lines: list) -> list:
+    new_lines = list(proof.lines[:line_pushed])
+    new_lines += lines
+    last_proof_line = len(lines)
+    for line in proof.lines[line_pushed + 1:]:
+        if line.is_assumption():
+            new_lines.append(line)
+            continue
+        assumptions = []
+        for assumption in line.assumptions:
+            assumptions.append(assumption + last_proof_line - 1) if line_pushed <= assumption else assumptions.append(
+                assumption)
+        new_lines.append(Proof.Line(line.formula, line.rule, assumptions))
+    return new_lines
 
 
 def prove_from_opposites(proof_of_affirmation: Proof,
