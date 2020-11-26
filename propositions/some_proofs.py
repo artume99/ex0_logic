@@ -89,7 +89,6 @@ def prove_hypothetical_syllogism() -> Proof:
     line5 = Proof.Line(Formula.parse('r'), MP, [2, 3])
     lines = [line1, line2, line3, line4, line5]
     proof = Proof(statement, rules, lines)
-    print(remove_assumption(proof))
     return remove_assumption(proof)
 
     # Task 5.5

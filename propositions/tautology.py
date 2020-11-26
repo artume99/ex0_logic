@@ -16,6 +16,7 @@ from propositions.proofs import *
 from propositions.axiomatic_systems import *
 from propositions.deduction import *
 
+
 def formulas_capturing_model(model: Model) -> List[Formula]:
     """Computes the formulas that capture the given model: ``'``\ `x`\ ``'``
     for each variable `x` that is assigned the value ``True`` in the given
@@ -34,9 +35,13 @@ def formulas_capturing_model(model: Model) -> List[Formula]:
         [p1, ~p2, q]
     """
     assert is_model(model)
+    formula_list = list(map(lambda m: Formula.parse(m[0]) if m[1] else Formula.parse('~' + m[0]), model.items()))
+    formula_list = sorted(formula_list, key=lambda f: str(f.variables()))
+    return formula_list
     # Task 6.1a
 
-def prove_in_model(formula: Formula, model:Model) -> Proof:
+
+def prove_in_model(formula: Formula, model: Model) -> Proof:
     """Either proves the given formula or proves its negation, from the formulas
     that capture the given model.
 
@@ -78,7 +83,65 @@ def prove_in_model(formula: Formula, model:Model) -> Proof:
     """
     assert formula.operators().issubset({'->', '~'})
     assert is_model(model)
+
+    rules = AXIOMATIC_SYSTEM
+    statement_assumption = formulas_capturing_model(model)
+    formula_value = evaluate(formula, model)
+    statement_conclusion = formula if formula_value else Formula.parse('~' + str(formula))
+    statement = InferenceRule(statement_assumption, statement_conclusion)
+    offset, lines = _prove_in_model_helper(formula, model)
+    return Proof(statement, rules, lines)
     # Task 6.1b
+
+
+def _prove_in_model_helper(formula: Formula, model: Model) -> Tuple[int, List[Proof.Line]]:
+    if is_variable(formula.root) or (is_unary(formula.root) and is_variable(formula.first.root)):
+        return 0, [Proof.Line(formula)]
+    rules = AXIOMATIC_SYSTEM
+    statement_assumption = formulas_capturing_model(model)
+    formula_value = evaluate(formula, model)
+    statement_conclusion = formula if formula_value else Formula.parse('~' + str(formula))
+    statement = InferenceRule(statement_assumption, statement_conclusion)
+    lines = []
+    offset = 0
+    if is_binary(formula.root):
+        if formula_value:
+            if not evaluate(formula.first, model):
+                offset, lines_n = _prove_in_model_helper(Formula.parse('~' + str(formula.first)), model)
+                lines += lines_n
+                line2 = Proof.Line(I2.specialize({'p': formula.first, 'q': formula.second}).conclusion, I2, [])
+                line3 = Proof.Line(
+                    MP.specialize({'p': Formula.parse('~' + str(formula.first)), 'q': formula}).conclusion, MP,
+                    [offset + 0, offset + 1])
+                offset += 2
+                lines.extend([line2, line3])
+            if evaluate(formula.second, model):
+                offset, lines_n = _prove_in_model_helper(formula.second, model)
+                lines += lines_n
+                line2 = Proof.Line(I1.specialize({'p': formula.first, 'q': formula.second}).conclusion, I1, [])
+                line3 = Proof.Line(
+                    MP.specialize({'p': formula.first, 'q': formula}).conclusion, MP,
+                    [offset + 0, offset + 1])
+                offset += 2
+                lines.extend([line2, line3])
+        else:
+            offset, lines_n = _prove_in_model_helper(formula.first, model)
+            lines += lines_n
+            line2 = Proof.Line(
+                NI.specialize({'p': formula.first, 'q': formula.second}).conclusion, NI, [])
+            line3 = Proof.Line(MP.specialize({'p': formula.first, 'q': line2.formula.second}).conclusion,
+                               MP, [offset + 0, offset + 1])
+            line3_idx = len(lines) - 1
+            offset, lines_n = _prove_in_model_helper(Formula.parse('~' + str(formula.second)), model)
+            lines += lines_n
+            line4 = Proof.Line(MP.specialize({'p': formula.second, 'q': Formula.parse('~' + str(formula))}).conclusion,
+                               MP, [offset, line3_idx])
+            offset += 3
+            lines.extend([line2, line3, line4])
+    else:
+        offset = 0
+    return offset, lines
+
 
 def reduce_assumption(proof_from_affirmation: Proof,
                       proof_from_negation: Proof) -> Proof:
@@ -123,6 +186,7 @@ def reduce_assumption(proof_from_affirmation: Proof,
            proof_from_negation.statement.assumptions[-1]
     assert proof_from_affirmation.rules == proof_from_negation.rules
     # Task 6.2
+
 
 def prove_tautology(tautology: Formula, model: Model = frozendict()) -> Proof:
     """Proves the given tautology from the formulas that capture the given
@@ -169,6 +233,7 @@ def prove_tautology(tautology: Formula, model: Model = frozendict()) -> Proof:
     assert sorted(tautology.variables())[:len(model)] == sorted(model.keys())
     # Task 6.3a
 
+
 def proof_or_counterexample(formula: Formula) -> Union[Proof, Model]:
     """Either proves the given formula or finds a model in which it does not
     hold.
@@ -184,6 +249,7 @@ def proof_or_counterexample(formula: Formula) -> Union[Proof, Model]:
     """
     assert formula.operators().issubset({'->', '~'})
     # Task 6.3b
+
 
 def encode_as_formula(rule: InferenceRule) -> Formula:
     """Encodes the given inference rule as a formula consisting of a chain of
@@ -206,6 +272,7 @@ def encode_as_formula(rule: InferenceRule) -> Formula:
     """
     # Task 6.4a
 
+
 def prove_sound_inference(rule: InferenceRule) -> Proof:
     """Proves the given sound inference rule.
 
@@ -221,6 +288,7 @@ def prove_sound_inference(rule: InferenceRule) -> Proof:
     for formula in rule.assumptions + (rule.conclusion,):
         assert formula.operators().issubset({'->', '~'})
     # Task 6.4b
+
 
 def model_or_inconsistency(formulas: Sequence[Formula]) -> Union[Model, Proof]:
     """Either finds a model in which all the given formulas hold, or proves
@@ -238,6 +306,7 @@ def model_or_inconsistency(formulas: Sequence[Formula]) -> Union[Model, Proof]:
     for formula in formulas:
         assert formula.operators().issubset({'->', '~'})
     # Task 6.5
+
 
 def prove_in_model_full(formula: Formula, model: Model) -> Proof:
     """Either proves the given formula or proves its negation, from the formulas

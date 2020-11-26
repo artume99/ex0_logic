@@ -474,7 +474,11 @@ class Proof:
                 return False
         if not self.lines:  # No lines in the proof
             return False
-        if self.rule_for_line(len(self.lines)-1).conclusion != self.statement.conclusion:  # Checks if we reached the
+        if self.lines[(len(self.lines) - 1)].is_assumption():
+            if self.lines[(len(self.lines) - 1)].formula != self.statement.conclusion:
+                return False
+        elif self.rule_for_line(
+                len(self.lines) - 1).conclusion != self.statement.conclusion:  # Checks if we reached the
             # conclusion at the end of the proof
             return False
         return True
@@ -497,7 +501,47 @@ def prove_specialization(proof: Proof, specialization: InferenceRule) -> Proof:
     """
     assert proof.is_valid()
     assert specialization.is_specialization_of(proof.statement)
+    new_lines = []
+    lemma = specialization
+    rules = proof.rules
+    spec_map = InferenceRule.specialization_map(proof.statement, lemma)  # Creating the map to substitute the variables
+    for i, line in enumerate(proof.lines):
+        if line.is_assumption():
+            new_lines.append(
+                Proof.Line(
+                    line.formula.substitute_variables(spec_map)))  # If assumption we only need the formula of the line
+            continue
+        specialized_rule_line = proof.rule_for_line(i).specialize(spec_map)
+        new_lines.append(Proof.Line(specialized_rule_line.conclusion, line.rule, line.assumptions))
+    return Proof(lemma, rules, new_lines)
     # Task 5.1
+
+
+def _scan_proof_and_add_lines(lemma_spec_proof, lemma_assumption_dict, lines, line_number) -> Tuple[int, list]:
+    assumption_counter = 0
+    line_number_dic = {}  # A dictionary between proof numbers and the modified proof lines
+    real_line_number = 0
+    for num, line in enumerate(lemma_spec_proof.lines):
+        if line.is_assumption():
+            assumption_counter += 1
+            continue
+        assumptions = []
+        line_number_dic.update({num: real_line_number})
+        for i, assumption in enumerate(line.assumptions):
+            if lemma_spec_proof.lines[assumption].is_assumption():  # If it is assumption, check where it was mapped to
+                assumptions.append(lemma_assumption_dict[lemma_spec_proof.lines[assumption].formula])
+            else:
+                assumptions.append(line_number_dic[assumption] + line_number)
+        lines.append(Proof.Line(line.formula, line.rule, assumptions))
+        real_line_number += 1
+    return assumption_counter, lines
+
+
+def _map_between_assumption_and_line(assumptions, lines) -> dict:
+    lemma_assumption_dict = {}
+    for l, n in zip(lines, assumptions):
+        lemma_assumption_dict.update({n: l})
+    return lemma_assumption_dict
 
 
 def _inline_proof_once(main_proof: Proof, line_number: int, lemma_proof: Proof) \
@@ -526,7 +570,34 @@ def _inline_proof_once(main_proof: Proof, line_number: int, lemma_proof: Proof) 
     """
     assert main_proof.lines[line_number].rule == lemma_proof.statement
     assert lemma_proof.is_valid()
-    # Task 5.2a
+
+    lines = list(main_proof.lines[0:line_number])
+    lemma_spec_proof = prove_specialization(lemma_proof, main_proof.rule_for_line(line_number))
+
+    lemma_assumptions = list(main_proof.lines[line_number].assumptions)
+    lemma_statement_assumptions = lemma_spec_proof.statement.assumptions
+
+    # This is a dictionary that maps every assumption to its place in the main proof
+    lemma_assumption_dict = _map_between_assumption_and_line(lemma_statement_assumptions, lemma_assumptions)
+    assumption_counter, lines = _scan_proof_and_add_lines(lemma_spec_proof, lemma_assumption_dict, lines, line_number)
+    last_proof_line = len(lemma_proof.lines) - assumption_counter
+
+    last_lines = list(main_proof.lines[line_number + 1:])
+    for line in last_lines:
+        if line.is_assumption():
+            lines.append(line)
+            continue
+        assumptions = []
+        for assumption in line.assumptions:
+            assumptions.append(
+                assumption + last_proof_line - 1) if line_number <= assumption else assumptions.append(
+                assumption)
+        lines.append(Proof.Line(line.formula, line.rule, assumptions))
+    rules = set(main_proof.rules.union(lemma_proof.rules))
+    return Proof(main_proof.statement, rules, lines)
+
+
+# Task 5.2a
 
 
 def inline_proof(main_proof: Proof, lemma_proof: Proof) -> Proof:
@@ -547,4 +618,14 @@ def inline_proof(main_proof: Proof, lemma_proof: Proof) -> Proof:
         rules allowed in the two given proofs but without the "lemma" rule
         proved by `lemma_proof`.
     """
+    for i, line in enumerate(main_proof.lines):
+        if line.is_assumption():
+            continue
+        if main_proof.rule_for_line(i).is_specialization_of(lemma_proof.statement):
+            proof = _inline_proof_once(main_proof, i, lemma_proof)
+            return inline_proof(proof,
+                                lemma_proof)  # After we changed one line, we go back to the proof to search for more
+    rules = main_proof.rules.union(lemma_proof.rules).difference(
+        {lemma_proof.statement})  # Because for some reason they included the lemma rule, so we got to remove it
+    return Proof(main_proof.statement, rules, main_proof.lines)
     # Task 5.2b

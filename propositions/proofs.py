@@ -627,6 +627,5 @@ def inline_proof(main_proof: Proof, lemma_proof: Proof) -> Proof:
                                 lemma_proof)  # After we changed one line, we go back to the proof to search for more
     rules = main_proof.rules.union(lemma_proof.rules).difference(
         {lemma_proof.statement})  # Because for some reason they included the lemma rule, so we got to remove it
-    print(Proof(main_proof.statement, rules, main_proof.lines))
     return Proof(main_proof.statement, rules, main_proof.lines)
     # Task 5.2b

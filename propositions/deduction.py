@@ -230,7 +230,6 @@ def remove_assumption(proof: Proof) -> Proof:
             lines += new_lines
             line_dic.update({num: num + offset})
             pass
-
     return Proof(statement, rules, lines)
     # Task 5.4
 

@@ -421,7 +421,7 @@ def test_is_valid(debug=False):
 
     proof = DISJUNCTION_COMMUTATIVITY_PROOF
     if debug:
-        print('\nTesting validity of the following deductive proof:\n' +
+        print('\nTesting validity of the follow6ing deductive proof:\n' +
               str(proof))
     assert proof.is_valid()
 
