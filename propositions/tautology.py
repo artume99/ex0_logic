@@ -89,58 +89,68 @@ def prove_in_model(formula: Formula, model: Model) -> Proof:
     formula_value = evaluate(formula, model)
     statement_conclusion = formula if formula_value else Formula.parse('~' + str(formula))
     statement = InferenceRule(statement_assumption, statement_conclusion)
-    offset, lines = _prove_in_model_helper(formula, model)
+    lines = []
+    _prove_in_model_helper(statement_conclusion, model, formula_value, lines)
     return Proof(statement, rules, lines)
     # Task 6.1b
 
 
-def _prove_in_model_helper(formula: Formula, model: Model) -> Tuple[int, List[Proof.Line]]:
-    if is_variable(formula.root) or (is_unary(formula.root) and is_variable(formula.first.root)):
-        return 0, [Proof.Line(formula)]
-    rules = AXIOMATIC_SYSTEM
-    statement_assumption = formulas_capturing_model(model)
-    formula_value = evaluate(formula, model)
-    statement_conclusion = formula if formula_value else Formula.parse('~' + str(formula))
-    statement = InferenceRule(statement_assumption, statement_conclusion)
-    lines = []
-    offset = 0
+def lemma_case_1(formula: Formula, offset: int):
+    line1 = Proof.Line(I2.specialize({'p': formula.first, 'q': formula.second}).conclusion, I2, [])
+    line2 = Proof.Line(
+        MP.specialize({'p': Formula.parse('~' + str(formula.first)), 'q': formula}).conclusion, MP,
+        [offset + 0, offset + 1])
+    return [line1,line2]
+
+def _prove_in_model_helper(formula: Formula, model: Model, formula_value: bool, lines):
+    if is_variable(formula.root):
+        lines.extend([Proof.Line(formula)]) if evaluate(formula, model) else lines.extend(
+            [Proof.Line(Formula.parse("~" + str(formula)))])
     if is_binary(formula.root):
         if formula_value:
             if not evaluate(formula.first, model):
-                offset, lines_n = _prove_in_model_helper(Formula.parse('~' + str(formula.first)), model)
-                lines += lines_n
+                _prove_in_model_helper(Formula.parse('~' + str(formula.first)), model,
+                                       evaluate(formula.first, model), lines)
+                offset = len(lines) - 1
                 line2 = Proof.Line(I2.specialize({'p': formula.first, 'q': formula.second}).conclusion, I2, [])
                 line3 = Proof.Line(
                     MP.specialize({'p': Formula.parse('~' + str(formula.first)), 'q': formula}).conclusion, MP,
                     [offset + 0, offset + 1])
-                offset += 2
                 lines.extend([line2, line3])
             if evaluate(formula.second, model):
-                offset, lines_n = _prove_in_model_helper(formula.second, model)
-                lines += lines_n
+                _prove_in_model_helper(formula.second, model, evaluate(formula.first, model), lines)
+                offset = len(lines) - 1
                 line2 = Proof.Line(I1.specialize({'p': formula.first, 'q': formula.second}).conclusion, I1, [])
                 line3 = Proof.Line(
                     MP.specialize({'p': formula.first, 'q': formula}).conclusion, MP,
                     [offset + 0, offset + 1])
-                offset += 2
                 lines.extend([line2, line3])
         else:
-            offset, lines_n = _prove_in_model_helper(formula.first, model)
-            lines += lines_n
+            _prove_in_model_helper(formula.first, model, evaluate(formula.first, model), lines)
+            offset = len(lines) - 1
             line2 = Proof.Line(
                 NI.specialize({'p': formula.first, 'q': formula.second}).conclusion, NI, [])
             line3 = Proof.Line(MP.specialize({'p': formula.first, 'q': line2.formula.second}).conclusion,
                                MP, [offset + 0, offset + 1])
-            line3_idx = len(lines) - 1
-            offset, lines_n = _prove_in_model_helper(Formula.parse('~' + str(formula.second)), model)
-            lines += lines_n
+            line3_idx = len(lines) + 1
+            lines.extend([line2, line3])
+            _prove_in_model_helper(Formula.parse('~' + str(formula.second)), model,
+                                   evaluate(formula.first, model), lines)
+            offset = len(lines) - 1
             line4 = Proof.Line(MP.specialize({'p': formula.second, 'q': Formula.parse('~' + str(formula))}).conclusion,
                                MP, [offset, line3_idx])
-            offset += 3
-            lines.extend([line2, line3, line4])
-    else:
-        offset = 0
-    return offset, lines
+            lines.extend([line4])
+    elif is_unary(formula.root):
+        if evaluate(formula, model):
+            _prove_in_model_helper(formula.first, model,
+                                   evaluate(formula.first, model), lines)
+        else:
+            _prove_in_model_helper(formula.first, model, evaluate(formula.first, model), lines)
+            offset = len(lines) - 1
+            line1 = Proof.Line(NN.specialize({'p': formula.first}).conclusion, NN, [])
+            line2 = Proof.Line(MP.specialize({'p': formula.first, 'q': line1.formula.second}).conclusion,
+                               MP, [offset + 0, offset + 1])
+            lines.extend([line1, line2])
 
 
 def reduce_assumption(proof_from_affirmation: Proof,

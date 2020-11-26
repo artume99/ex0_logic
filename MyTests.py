@@ -8,8 +8,7 @@ from propositions.axiomatic_systems import *
 from propositions.deduction_test import *
 from propositions.tautology import *
 
-proof = prove_in_model(Formula.parse('(p->q7)'),{'q7': False, 'p': True})
+proof = prove_in_model(Formula.parse('(p->q7)'), {'q7': False, 'p': True})
 print(proof)
-proof = prove_in_model(Formula.parse('(p->q7)'), {'q7': False, 'p': False})
+proof = prove_in_model(Formula.parse('(~(p->q7)->(p->q7))'), {'q7': False, 'p': False})
 print(proof)
-
