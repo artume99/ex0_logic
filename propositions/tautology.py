@@ -96,11 +96,59 @@ def prove_in_model(formula: Formula, model: Model) -> Proof:
 
 
 def lemma_case_1(formula: Formula, offset: int):
+    """
+    (p->q) true, p false
+    :param formula:
+    :param offset:
+    :return:
+    """
     line1 = Proof.Line(I2.specialize({'p': formula.first, 'q': formula.second}).conclusion, I2, [])
     line2 = Proof.Line(
         MP.specialize({'p': Formula.parse('~' + str(formula.first)), 'q': formula}).conclusion, MP,
         [offset + 0, offset + 1])
-    return [line1,line2]
+    return [line1, line2]
+
+
+def lemma_case_2(formula: Formula, offset: int):
+    """
+        (p->q) true, q true
+        :param formula:
+        :param offset:
+        :return:
+        """
+    line1 = Proof.Line(I1.specialize({'p': formula.first, 'q': formula.second}).conclusion, I1, [])
+    line2 = Proof.Line(
+        MP.specialize({'p': formula.first, 'q': formula}).conclusion, MP,
+        [offset + 0, offset + 1])
+    return [line1, line2]
+
+
+def lemma_case_3(formula: Formula, offset: int):
+    """
+        (p->q) false
+        :param formula:
+        :param offset:
+        :return:
+        """
+    line1 = Proof.Line(
+        NI.specialize({'p': formula.first, 'q': formula.second}).conclusion, NI, [])
+    line2 = Proof.Line(MP.specialize({'p': formula.first, 'q': line1.formula.second}).conclusion,
+                       MP, [offset + 0, offset + 1])
+    return [line1, line2]
+
+
+def lemma_negation(formula: Formula, offset: int):
+    """
+        ~p false
+        :param formula:
+        :param offset:
+        :return:
+        """
+    line1 = Proof.Line(NN.specialize({'p': formula.first}).conclusion, NN, [])
+    line2 = Proof.Line(MP.specialize({'p': formula.first, 'q': line1.formula.second}).conclusion,
+                       MP, [offset + 0, offset + 1])
+    return [line1, line2]
+
 
 def _prove_in_model_helper(formula: Formula, model: Model, formula_value: bool, lines):
     if is_variable(formula.root):
@@ -112,28 +160,16 @@ def _prove_in_model_helper(formula: Formula, model: Model, formula_value: bool, 
                 _prove_in_model_helper(Formula.parse('~' + str(formula.first)), model,
                                        evaluate(formula.first, model), lines)
                 offset = len(lines) - 1
-                line2 = Proof.Line(I2.specialize({'p': formula.first, 'q': formula.second}).conclusion, I2, [])
-                line3 = Proof.Line(
-                    MP.specialize({'p': Formula.parse('~' + str(formula.first)), 'q': formula}).conclusion, MP,
-                    [offset + 0, offset + 1])
-                lines.extend([line2, line3])
+                lines.extend(lemma_case_1(formula, offset))
             if evaluate(formula.second, model):
                 _prove_in_model_helper(formula.second, model, evaluate(formula.first, model), lines)
                 offset = len(lines) - 1
-                line2 = Proof.Line(I1.specialize({'p': formula.first, 'q': formula.second}).conclusion, I1, [])
-                line3 = Proof.Line(
-                    MP.specialize({'p': formula.first, 'q': formula}).conclusion, MP,
-                    [offset + 0, offset + 1])
-                lines.extend([line2, line3])
+                lines.extend(lemma_case_2(formula, offset))
         else:
             _prove_in_model_helper(formula.first, model, evaluate(formula.first, model), lines)
             offset = len(lines) - 1
-            line2 = Proof.Line(
-                NI.specialize({'p': formula.first, 'q': formula.second}).conclusion, NI, [])
-            line3 = Proof.Line(MP.specialize({'p': formula.first, 'q': line2.formula.second}).conclusion,
-                               MP, [offset + 0, offset + 1])
             line3_idx = len(lines) + 1
-            lines.extend([line2, line3])
+            lines.extend(lemma_case_3(formula, offset))
             _prove_in_model_helper(Formula.parse('~' + str(formula.second)), model,
                                    evaluate(formula.first, model), lines)
             offset = len(lines) - 1
@@ -147,10 +183,7 @@ def _prove_in_model_helper(formula: Formula, model: Model, formula_value: bool, 
         else:
             _prove_in_model_helper(formula.first, model, evaluate(formula.first, model), lines)
             offset = len(lines) - 1
-            line1 = Proof.Line(NN.specialize({'p': formula.first}).conclusion, NN, [])
-            line2 = Proof.Line(MP.specialize({'p': formula.first, 'q': line1.formula.second}).conclusion,
-                               MP, [offset + 0, offset + 1])
-            lines.extend([line1, line2])
+            lines.extend(lemma_negation(formula, offset))
 
 
 def reduce_assumption(proof_from_affirmation: Proof,
