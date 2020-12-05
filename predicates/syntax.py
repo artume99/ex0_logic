@@ -7,13 +7,17 @@
 """Syntactic handling of predicate-logic expressions."""
 
 from __future__ import annotations
+
+import copy
+from functools import lru_cache
 from typing import AbstractSet, Mapping, Optional, Sequence, Set, Tuple, Union
 
 from logic_utils import fresh_variable_name_generator, frozen, \
-                        memoized_parameterless_method
+    memoized_parameterless_method
 
 from propositions.syntax import Formula as PropositionalFormula, \
-                                is_variable as is_propositional_variable
+    is_variable as is_propositional_variable
+
 
 class ForbiddenVariableError(Exception):
     """Raised by `Term.substitute` and `Formula.substitute` when a substituted
@@ -36,7 +40,8 @@ class ForbiddenVariableError(Exception):
         assert is_variable(variable_name)
         self.variable_name = variable_name
 
-@lru_cache(maxsize=100) # Cache the return value of is_constant
+
+@lru_cache(maxsize=100)  # Cache the return value of is_constant
 def is_constant(string: str) -> bool:
     """Checks if the given string is a constant name.
 
@@ -46,11 +51,12 @@ def is_constant(string: str) -> bool:
     Returns:
         ``True`` if the given string is a constant name, ``False`` otherwise.
     """
-    return  (((string[0] >= '0' and string[0] <= '9') or \
-              (string[0] >= 'a' and string[0] <= 'd')) and \
-             string.isalnum()) or string == '_'
+    return (((string[0] >= '0' and string[0] <= '9') or \
+             (string[0] >= 'a' and string[0] <= 'd')) and \
+            string.isalnum()) or string == '_'
 
-@lru_cache(maxsize=100) # Cache the return value of is_variable
+
+@lru_cache(maxsize=100)  # Cache the return value of is_variable
 def is_variable(string: str) -> bool:
     """Checks if the given string is a variable name.
 
@@ -62,7 +68,8 @@ def is_variable(string: str) -> bool:
     """
     return string[0] >= 'u' and string[0] <= 'z' and string.isalnum()
 
-@lru_cache(maxsize=100) # Cache the return value of is_function
+
+@lru_cache(maxsize=100)  # Cache the return value of is_function
 def is_function(string: str) -> bool:
     """Checks if the given string is a function name.
 
@@ -73,6 +80,7 @@ def is_function(string: str) -> bool:
         ``True`` if the given string is a function name, ``False`` otherwise.
     """
     return string[0] >= 'f' and string[0] <= 't' and string.isalnum()
+
 
 @frozen
 class Term:
@@ -105,6 +113,9 @@ class Term:
             self.root = root
             self.arguments = tuple(arguments)
             assert len(self.arguments) > 0
+        self.FUNC_SET = set()
+        self.CONST_SET = set()
+        self.VAR_SET = set()
 
     @memoized_parameterless_method
     def __repr__(self) -> str:
@@ -113,6 +124,18 @@ class Term:
         Returns:
             The standard string representation of the current term.
         """
+        rep = ""
+        if self.root:
+            if is_function(self.root):
+                rep += self.root
+                args = []
+                for arg in self.arguments:
+                    args.append(repr(arg))
+                args = ','.join(args)
+                rep += f'({args})'
+            if is_constant(self.root) or is_variable(self.root):
+                rep += self.root
+        return rep
         # Task 7.1
 
     def __eq__(self, other: object) -> bool:
@@ -126,7 +149,7 @@ class Term:
             current term, ``False`` otherwise.
         """
         return isinstance(other, Term) and str(self) == str(other)
-        
+
     def __ne__(self, other: object) -> bool:
         """Compares the current term with the given one.
 
@@ -156,7 +179,37 @@ class Term:
             or a variable name (e.g., ``'x12'``), then the parsed prefix will be
             that entire name (and not just a part of it, such as ``'x1'``).
         """
+        remained_term = ""
+        term = None
+        if is_function(string[0]):
+            root, remained_term = string.split('(', 1)
+            arguments = []
+            # While loop to catch all the arguments of the formula
+            while True:
+                arg, remained_term = Term._parse_prefix(remained_term)
+                arguments.append(arg)
+                if remained_term[0] == ')':  # End of arguments
+                    break
+                remained_term = remained_term[1:]
+            remained_term = remained_term.replace(')', "", 1)  # Remove closing parenthesis
+            term = Term(root, arguments)
+        if is_constant(string[0]) or is_variable(string[0]):
+            finished_string, i = Term._construct_variable_name(string)
+            term = Term(finished_string)
+            remained_term = string[i:]
+        return term, remained_term
+
         # Task 7.3.1
+
+    @staticmethod
+    def _construct_variable_name(string: str) -> Tuple[str, int]:
+        i = 0
+        finished_string = ''
+        while i < len(string) and (
+                is_variable(string[0:i + 1]) or is_constant(string[0:i + 1])):
+            finished_string += string[i]
+            i += 1
+        return finished_string, i
 
     @staticmethod
     def parse(string: str) -> Term:
@@ -168,7 +221,18 @@ class Term:
         Returns:
             A term whose standard string representation is the given string.
         """
+        return Term._parse_prefix(string)[0]
         # Task 7.3.2
+
+    def set_creator(self, func_set, const_set, var_set):
+        if is_function(self.root):
+            for arg in self.arguments:
+                arg.set_creator(func_set, const_set, var_set)
+            func_set.add((self.root, len(self.arguments)))
+        if is_constant(self.root):
+            const_set.add(self.root)
+        if is_variable(self.root):
+            var_set.add(self.root)
 
     @memoized_parameterless_method
     def constants(self) -> Set[str]:
@@ -177,6 +241,9 @@ class Term:
         Returns:
             A set of all constant names used in the current term.
         """
+        if not self.CONST_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET)
+        return self.CONST_SET
         # Task 7.5.1
 
     @memoized_parameterless_method
@@ -186,6 +253,9 @@ class Term:
         Returns:
             A set of all variable names used in the current term.
         """
+        if not self.VAR_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET)
+        return self.VAR_SET
         # Task 7.5.2
 
     @memoized_parameterless_method
@@ -197,6 +267,9 @@ class Term:
             A set of pairs of function name and arity (number of arguments) for
             all function names used in the current term.
         """
+        if not self.FUNC_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET)
+        return self.FUNC_SET
         # Task 7.5.3
 
     def substitute(self, substitution_map: Mapping[str, Term],
@@ -237,7 +310,8 @@ class Term:
             assert is_variable(variable)
         # Task 9.1
 
-@lru_cache(maxsize=100) # Cache the return value of is_equality
+
+@lru_cache(maxsize=100)  # Cache the return value of is_equality
 def is_equality(string: str) -> bool:
     """Checks if the given string is the equality relation.
 
@@ -250,7 +324,8 @@ def is_equality(string: str) -> bool:
     """
     return string == '='
 
-@lru_cache(maxsize=100) # Cache the return value of is_relation
+
+@lru_cache(maxsize=100)  # Cache the return value of is_relation
 def is_relation(string: str) -> bool:
     """Checks if the given string is a relation name.
 
@@ -262,7 +337,8 @@ def is_relation(string: str) -> bool:
     """
     return string[0] >= 'F' and string[0] <= 'T' and string.isalnum()
 
-@lru_cache(maxsize=100) # Cache the return value of is_unary
+
+@lru_cache(maxsize=100)  # Cache the return value of is_unary
 def is_unary(string: str) -> bool:
     """Checks if the given string is a unary operator.
 
@@ -274,7 +350,8 @@ def is_unary(string: str) -> bool:
     """
     return string == '~'
 
-@lru_cache(maxsize=100) # Cache the return value of is_binary
+
+@lru_cache(maxsize=100)  # Cache the return value of is_binary
 def is_binary(string: str) -> bool:
     """Checks if the given string is a binary operator.
 
@@ -286,7 +363,8 @@ def is_binary(string: str) -> bool:
     """
     return string == '&' or string == '|' or string == '->'
 
-@lru_cache(maxsize=100) # Cache the return value of is_quantifier
+
+@lru_cache(maxsize=100)  # Cache the return value of is_quantifier
 def is_quantifier(string: str) -> bool:
     """Checks if the given string is a quantifier.
 
@@ -297,6 +375,21 @@ def is_quantifier(string: str) -> bool:
         ``True`` if the given string is a quantifier, ``False`` otherwise.
     """
     return string == 'A' or string == 'E'
+
+
+def root_check(string: str):
+    """
+    Creating and checking the validation of a root
+    :param string: a string from which we construct root
+    :return: a root and a the modified string
+    """
+    new_string = string
+    root = string[0]
+    if root == '-' and len(string) >= 2:
+        root = string[0:2]
+        new_string = string[1:]
+    return root, new_string
+
 
 @frozen
 class Formula:
@@ -363,7 +456,7 @@ class Formula:
             assert isinstance(arguments_or_first_or_variable, Formula) and \
                    second_or_predicate is not None
             self.root, self.first, self.second = \
-                root, arguments_or_first_or_variable, second_or_predicate           
+                root, arguments_or_first_or_variable, second_or_predicate
         else:
             assert is_quantifier(root)
             # Populate self.variable and self.predicate
@@ -372,6 +465,11 @@ class Formula:
                    second_or_predicate is not None
             self.root, self.variable, self.predicate = \
                 root, arguments_or_first_or_variable, second_or_predicate
+        self.CONST_SET = set()
+        self.VAR_SET = set()
+        self.FREE_VAR_SET = set()
+        self.FUNC_SET = set()
+        self.RELATION_SET = set()
 
     @memoized_parameterless_method
     def __repr__(self) -> str:
@@ -380,6 +478,24 @@ class Formula:
         Returns:
             The standard string representation of the current formula.
         """
+        rep = ""
+        if self.root:
+            if is_equality(self.root):
+                rep += f'{repr(self.arguments[0])}={repr(self.arguments[1])}'
+            if is_relation(self.root):
+                rep += self.root
+                args = []
+                for arg in self.arguments:
+                    args.append(repr(arg))
+                args = ','.join(args)
+                rep += f'({args})'
+            if is_unary(self.root):
+                rep += f'~{self.first}'
+            if is_binary(self.root):
+                rep += f'({repr(self.first)}{self.root}{repr(self.second)})'
+            if is_quantifier(self.root):
+                rep += f'{self.root}{self.variable}[{repr(self.predicate)}]'
+        return rep
         # Task 7.2
 
     def __eq__(self, other: object) -> bool:
@@ -393,7 +509,7 @@ class Formula:
             current formula, ``False`` otherwise.
         """
         return isinstance(other, Formula) and str(self) == str(other)
-        
+
     def __ne__(self, other: object) -> bool:
         """Compares the current formula with the given one.
 
@@ -424,6 +540,50 @@ class Formula:
             (e.g., ``'x12'``), then the parsed prefix will include that entire
             name (and not just a part of it, such as ``'x1'``).
         """
+        remained_string = copy.deepcopy(string)
+        formula = None
+        if string[0] == '(':
+            first_formula, remained_string = Formula._parse_prefix(string[1:])  # Creating the first formula
+            root, remained_string = root_check(remained_string)
+            second_formula, remained_string = Formula._parse_prefix(remained_string[1:])  # Creating the second formula
+            remained_string = remained_string.replace(")", '', 1)  # Checking and removing the closing parentheses
+            formula = Formula(root, first_formula, second_formula)
+
+        if is_quantifier(string[0]):
+            before, remained_string = string.split('[', 1)
+            root, var = before[0], before[1:]
+            predicate, remained_string = Formula._parse_prefix(remained_string)
+            remained_string = remained_string.replace("]", '', 1)
+            formula = Formula(root, var, predicate)
+
+        if is_variable(string[0]) or is_constant(string[0]) or is_function(string[0]):
+            first, remained_string = Term._parse_prefix(string)
+            eq = remained_string[0]
+            second, remained_string = Term._parse_prefix(remained_string[1:])
+            formula = Formula(eq, [first, second])
+
+        if is_relation(string[0]):
+            root, remained_string = string.split('(', 1)
+            arguments = []
+            if remained_string[0] == ')':
+                remained_string = remained_string.replace(')', "", 1)
+                formula = Formula(root, arguments)
+            else:
+                # While loop to catch all the arguments of the formula
+                while True:
+                    arg, remained_string = Term._parse_prefix(remained_string)
+                    arguments.append(arg)
+                    if remained_string[0] == ')':  # End of arguments
+                        break
+                    remained_string = remained_string[1:]
+                remained_string = remained_string.replace(')', "", 1)  # Remove closing parenthesis
+                formula = Formula(root, arguments)
+
+        if is_unary(string[0]):
+            formula, remained_string = Formula._parse_prefix(string[1:])  # Recursive call for the unary parameter
+            formula = Formula(string[0], formula)
+        return formula, remained_string
+
         # Task 7.4.1
 
     @staticmethod
@@ -436,7 +596,40 @@ class Formula:
         Returns:
             A formula whose standard string representation is the given string.
         """
+        return Formula._parse_prefix(string)[0]
         # Task 7.4.2
+
+    def set_creator(self, func_set: set, const_set: set, var_set: set, relation_set: set, free_var_set: set,
+                    bad_vars=None):
+        if bad_vars is None:
+            bad_vars = set()
+        if is_binary(self.root):
+            self.first.set_creator(func_set, const_set, var_set, relation_set, free_var_set, bad_vars)
+            self.second.set_creator(func_set, const_set, var_set, relation_set, free_var_set, bad_vars)
+        if is_unary(self.root):
+            self.first.set_creator(func_set, const_set, var_set, relation_set, free_var_set, bad_vars)
+        if is_quantifier(self.root):
+            bad_vars.add(self.variable)
+            var_set.add(self.variable)
+            self.predicate.set_creator(func_set, const_set, var_set, relation_set, free_var_set, bad_vars)
+            bad_vars.clear()  # Clears the bad vars for next quantifier
+        if is_relation(self.root):
+            relation_set.add((self.root, len(self.arguments)))
+            for arg in self.arguments:
+                func_set.update(arg.functions())
+                const_set.update(arg.constants())
+                variables = arg.variables()
+                var_set.update(variables)
+                variables = var_set - bad_vars
+                free_var_set.update(variables)
+
+        if is_equality(self.root):
+            func_set.update(self.arguments[0].functions(), self.arguments[1].functions())
+            const_set.update(self.arguments[0].constants(), self.arguments[1].constants())
+            variables = self.arguments[0].variables().union(self.arguments[1].variables())
+            var_set.update(variables)
+            variables = var_set - bad_vars
+            free_var_set.update(variables)
 
     @memoized_parameterless_method
     def constants(self) -> Set[str]:
@@ -445,6 +638,9 @@ class Formula:
         Returns:
             A set of all constant names used in the current formula.
         """
+        if not self.CONST_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
+        return self.CONST_SET
         # Task 7.6.1
 
     @memoized_parameterless_method
@@ -454,6 +650,9 @@ class Formula:
         Returns:
             A set of all variable names used in the current formula.
         """
+        if not self.VAR_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
+        return self.VAR_SET
         # Task 7.6.2
 
     @memoized_parameterless_method
@@ -464,6 +663,9 @@ class Formula:
             A set of every variable name that is used in the current formula not
             only within a scope of a quantification on that variable name.
         """
+        if not self.FREE_VAR_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
+        return self.FREE_VAR_SET
         # Task 7.6.3
 
     @memoized_parameterless_method
@@ -475,6 +677,9 @@ class Formula:
             A set of pairs of function name and arity (number of arguments) for
             all function names used in the current formula.
         """
+        if not self.FUNC_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
+        return self.FUNC_SET
         # Task 7.6.4
 
     @memoized_parameterless_method
@@ -487,10 +692,13 @@ class Formula:
             all relation names used in the current formula.
         """
         # Task 7.6.5
+        if not self.RELATION_SET:
+            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
+        return self.RELATION_SET
 
     def substitute(self, substitution_map: Mapping[str, Term],
                    forbidden_variables: AbstractSet[str] = frozenset()) -> \
-                Formula:
+            Formula:
         """Substitutes in the current formula, each constant name `name` or free
         occurrence of variable name `name` that is a key in `substitution_map`
         with the term `substitution_map`\ ``[``\ `name`\ ``]``.

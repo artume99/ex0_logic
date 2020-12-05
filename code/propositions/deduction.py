@@ -75,6 +75,20 @@ def prove_corollary(antecedent_proof: Proof, consequent: Formula,
     # Task 5.3a
 
 
+def fix_lines(antecedent2_proof_lines, offset: int):
+    new_lines = list()
+    for line in antecedent2_proof_lines:
+        if line.is_assumption():
+            new_lines.append(line)
+        else:
+            new_assumption = list()
+            for assumption in line.assumptions:
+                new_assumption.append(assumption + offset)
+            new_line = Proof.Line(line.formula, line.rule, new_assumption)
+            new_lines.append(new_line)
+    return new_lines
+
+
 def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
                    consequent: Formula, double_conditional: InferenceRule) -> \
         Proof:
@@ -109,38 +123,49 @@ def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
                     Formula('->', antecedent2_proof.statement.conclusion, consequent))
     ).is_specialization_of(double_conditional)
 
-    lemma_statement = InferenceRule([double_conditional.conclusion.first, double_conditional.conclusion.second.first],
-                                    double_conditional.conclusion.second.second)
-    statement_assumptions = antecedent1_proof.statement.assumptions
-    statement_conclusion = consequent
-    statement = InferenceRule(statement_assumptions, statement_conclusion)
-    rules = antecedent1_proof.rules.union({double_conditional, MP, lemma_statement})
+    full_formula = Formula("->", antecedent1_proof.statement.conclusion,
+                           Formula("->",
+                                   antecedent2_proof.statement.conclusion,
+                                   consequent),
+                           )
+    inference_gen = InferenceRule(double_conditional.assumptions, full_formula)
 
-    lemma = lemma_for_combine(double_conditional, rules)
+    spec_map = double_conditional.specialization_map(inference_gen)
+    double_spec = double_conditional.specialize(spec_map)
 
-    # Adding the assumption of the second proof, the statement of the second proof and merging both proofs
-    sub_lines1 = list(antecedent1_proof.lines)
-    sub_line_assumption = Proof.Line(antecedent2_proof.statement.assumptions[-1])
-    sub_lines1.append(sub_line_assumption)
-    sub_line1 = Proof.Line(antecedent2_proof.statement.conclusion, antecedent2_proof.statement,
-                           [len(sub_lines1) - 2, len(sub_lines1) - 1]) if len(
-        antecedent1_proof.statement.assumptions) > 1 else Proof.Line(antecedent2_proof.statement.conclusion,
-                                                                     antecedent2_proof.statement,
-                                                                     [len(sub_lines1) - 1])
-    sub_lines1.append(sub_line1)
-    proof1 = Proof(statement, rules, sub_lines1)
-    proof = inline_proof(proof1, antecedent2_proof)
+    new_rules = antecedent1_proof.rules
+    new_assumptions = list(antecedent1_proof.statement.assumptions)
 
-    # Adding the statement of the lemma and merging the proofs
-    sub_lines = list(proof.lines)
-    sub_line = Proof.Line(statement_conclusion, lemma_statement, [len(antecedent1_proof.lines) - 1,
-                                                                  len(antecedent1_proof.lines) + len(
-                                                                      antecedent2_proof.lines) - 1])
-    sub_lines.append(sub_line)
+    second_part = double_spec.conclusion.second
 
-    proof = Proof(proof.statement, proof.rules, sub_lines)
-    return inline_proof(proof, lemma)
-    # Task 5.3b
+    first_lines = list(antecedent1_proof.lines)
+    second_lines = list(antecedent2_proof.lines)
+    combined_lines = first_lines.copy()
+
+    fixed_lines_2 = fix_lines(second_lines, len(combined_lines))
+    second_lines = fixed_lines_2
+
+    phy1_index = len(combined_lines) - 1
+    combined_lines.extend(second_lines)
+    phy2_index = len(combined_lines) - 1
+
+    conclusion_1 = Formula("->", antecedent1_proof.statement.conclusion, second_part)
+
+    given_line = Proof.Line(conclusion_1, double_conditional, [])
+    combined_lines.append(given_line)
+    last_idx = len(combined_lines) - 1
+
+    line1 = Proof.Line(second_part, MP, [phy1_index, last_idx])
+    combined_lines.extend([line1])
+    last_idx = len(combined_lines) - 1
+    line2 = Proof.Line(consequent, MP, [phy2_index, last_idx])
+    combined_lines.extend([line2])
+
+    statement = InferenceRule(new_assumptions, consequent)
+    return Proof(statement, new_rules, combined_lines)
+
+
+# Task 5.3b
 
 
 def _case1(line: Proof.Line) -> Proof.Line:
@@ -230,7 +255,6 @@ def remove_assumption(proof: Proof) -> Proof:
             lines += new_lines
             line_dic.update({num: num + offset})
             pass
-
     return Proof(statement, rules, lines)
     # Task 5.4
 
