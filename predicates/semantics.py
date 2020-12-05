@@ -15,6 +15,7 @@ from predicates.syntax import *
 #: A generic type for a universe element in a model.
 T = TypeVar('T')
 
+
 @frozen
 class Model(Generic[T]):
     """An immutable model for predicate-logic constructs.
@@ -48,7 +49,7 @@ class Model(Generic[T]):
                  constant_meanings: Mapping[str, T],
                  relation_meanings: Mapping[str, AbstractSet[Tuple[T, ...]]],
                  function_meanings: Mapping[str, Mapping[Tuple[T, ...], T]] =
-                    frozendict()):
+                 frozendict()):
         """Initializes a `Model` from its universe and constant, relation, and
         function meanings.
 
@@ -77,7 +78,7 @@ class Model(Generic[T]):
             assert is_relation(relation)
             relation_meaning = relation_meanings[relation]
             if len(relation_meaning) == 0:
-                arity = -1 # any
+                arity = -1  # any
             else:
                 some_arguments = next(iter(relation_meaning))
                 arity = len(some_arguments)
@@ -99,7 +100,7 @@ class Model(Generic[T]):
             some_argument = next(iter(function_meaning))
             arity = len(some_argument)
             assert arity > 0
-            assert len(function_meaning) == len(universe)**arity
+            assert len(function_meaning) == len(universe) ** arity
             for arguments in function_meaning:
                 assert len(arguments) == arity
                 for argument in arguments:
@@ -122,7 +123,7 @@ class Model(Generic[T]):
                str(self.relation_meanings) + \
                ('; Function Meanings=' + str(self.function_meanings)
                 if len(self.function_meanings) > 0 else '')
-        
+
     def evaluate_term(self, term: Term,
                       assignment: Mapping[str, T] = frozendict()) -> T:
         """Calculates the value of the given term in the current model, for the
@@ -141,9 +142,19 @@ class Model(Generic[T]):
         """
         assert term.constants().issubset(self.constant_meanings.keys())
         assert term.variables().issubset(assignment.keys())
-        for function,arity in term.functions():
+        for function, arity in term.functions():
             assert function in self.function_meanings and \
                    self.function_arities[function] == arity
+        if is_variable(term.root):
+            return assignment[term.root]
+        if is_constant(term.root):
+            return self.constant_meanings[term.root]
+        if is_function(term.root):
+            t_tuple = []
+            for arg in term.arguments:
+                t_tuple.append(self.evaluate_term(arg, assignment))
+            return self.function_meanings[term.root][tuple(t_tuple)]
+
         # Task 7.7
 
     def evaluate_formula(self, formula: Formula,
@@ -166,10 +177,10 @@ class Model(Generic[T]):
         """
         assert formula.constants().issubset(self.constant_meanings.keys())
         assert formula.free_variables().issubset(assignment.keys())
-        for function,arity in formula.functions():
+        for function, arity in formula.functions():
             assert function in self.function_meanings and \
                    self.function_arities[function] == arity
-        for relation,arity in formula.relations():
+        for relation, arity in formula.relations():
             assert relation in self.relation_meanings and \
                    self.relation_arities[relation] in {-1, arity}
         # Task 7.8
@@ -185,10 +196,10 @@ class Model(Generic[T]):
         """
         for formula in formulas:
             assert formula.constants().issubset(self.constant_meanings.keys())
-            for function,arity in formula.functions():
+            for function, arity in formula.functions():
                 assert function in self.function_meanings and \
                        self.function_arities[function] == arity
-            for relation,arity in formula.relations():
+            for relation, arity in formula.relations():
                 assert relation in self.relation_meanings and \
                        self.relation_arities[relation] in {-1, arity}
         # Task 7.9
