@@ -213,7 +213,6 @@ class Model(Generic[T]):
 
     def is_model_of(self, formulas: AbstractSet[Formula]) -> bool:
         """Checks if the current model is a model for the given formulas.
-
         Returns:
             ``True`` if each of the given formulas evaluates to true in the
             current model for any assignment of elements from the universe of
@@ -228,8 +227,29 @@ class Model(Generic[T]):
             for relation, arity in formula.relations():
                 assert relation in self.relation_meanings and \
                        self.relation_arities[relation] in {-1, arity}
-        for formula in formulas:
-            list_of_as = list(product(list(self.universe), repeat=len(formula.free_variables())))
-
+        # Task 7.9
+        for form in formulas:
+            free_variables = form.free_variables()
+            all_possible_assignments = self.get_free_assignments(
+                free_variables)
+            for possible in all_possible_assignments:
+                evaluation = self.evaluate_formula(form, possible)
+                if not evaluation:
+                    return False
         return True
+
+    def get_free_assignments(self, free_variables):
+        free_variables = list(free_variables)
+        amount = len(free_variables)
+        combinations = list(
+            product(list(self.universe), repeat=amount))
+        combs = list()
+        for comb in combinations:
+            dictionary = dict()
+            for index in range(len(free_variables)):
+                var = free_variables[index]
+                value = comb[index]
+                dictionary[var] = value
+            combs.append(dictionary)
+        return combs
         # Task 7.9
