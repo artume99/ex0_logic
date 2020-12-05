@@ -5,7 +5,7 @@
 # File name: predicates/semantics.py
 
 """Semantic analysis of predicate-logic expressions."""
-
+from itertools import product
 from typing import AbstractSet, FrozenSet, Generic, Mapping, Tuple, TypeVar
 
 from logic_utils import frozen, frozendict
@@ -14,6 +14,13 @@ from predicates.syntax import *
 
 #: A generic type for a universe element in a model.
 T = TypeVar('T')
+EXPRESSIONS = {'&': lambda first, second: first and second,
+               '|': lambda first, second: first or second,
+               '->': lambda first, second: (not first) or second,
+               '~': lambda first: not first}
+
+QUANTIFIERS = {'A': lambda x: all(x),
+               'E': lambda x: any(x)}
 
 
 @frozen
@@ -183,7 +190,26 @@ class Model(Generic[T]):
         for relation, arity in formula.relations():
             assert relation in self.relation_meanings and \
                    self.relation_arities[relation] in {-1, arity}
-        # Task 7.8
+        if is_equality(formula.root):
+            return self.evaluate_term(formula.arguments[0], assignment) == self.evaluate_term(formula.arguments[1],
+                                                                                              assignment)
+        if is_relation(formula.root):
+            return tuple([self.evaluate_term(t, assignment) for t in formula.arguments]) in self.relation_meanings[
+                formula.root]
+        if is_unary(formula.root):
+            return EXPRESSIONS[formula.root](self.evaluate_formula(formula.first, assignment))
+        if is_binary(formula.root):
+            return EXPRESSIONS[formula.root](self.evaluate_formula(formula.first, assignment),
+                                             self.evaluate_formula(formula.second, assignment))
+        if is_quantifier(formula.root):
+            list_of_dic = []
+            for om in self.universe:
+                assignment_var = dict(assignment)
+                assignment_var[formula.variable] = om
+                list_of_dic.append(assignment_var)
+            return QUANTIFIERS[formula.root]([self.evaluate_formula(formula.predicate, asi) for asi in list_of_dic])
+
+    # Task 7.8
 
     def is_model_of(self, formulas: AbstractSet[Formula]) -> bool:
         """Checks if the current model is a model for the given formulas.
@@ -202,4 +228,8 @@ class Model(Generic[T]):
             for relation, arity in formula.relations():
                 assert relation in self.relation_meanings and \
                        self.relation_arities[relation] in {-1, arity}
+        for formula in formulas:
+            list_of_as = list(product(list(self.universe), repeat=len(formula.free_variables())))
+
+        return True
         # Task 7.9
