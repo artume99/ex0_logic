@@ -124,18 +124,21 @@ class Term:
         Returns:
             The standard string representation of the current term.
         """
-        rep = ""
-        if self.root:
-            if is_function(self.root):
-                rep += self.root
-                args = []
-                for arg in self.arguments:
-                    args.append(repr(arg))
-                args = ','.join(args)
-                rep += f'({args})'
-            if is_constant(self.root) or is_variable(self.root):
-                rep += self.root
-        return rep
+        if is_variable(self.root) or is_constant(self.root):
+            return self.root
+        elif is_function(self.root):
+            arguments = self.arguments
+            constructed_string = self.root + "("
+            for i in range(len(arguments)):
+                if i < len(arguments) - 1:
+                    constructed_string = constructed_string + str(arguments[
+                                                                      i]) + ","
+                else:
+                    constructed_string = constructed_string + str(arguments[i])
+            constructed_string = constructed_string + ")"
+            return constructed_string
+        else:
+            raise Exception("unknown syntax")
         # Task 7.1
 
     def __eq__(self, other: object) -> bool:
@@ -478,24 +481,29 @@ class Formula:
         Returns:
             The standard string representation of the current formula.
         """
-        rep = ""
-        if self.root:
-            if is_equality(self.root):
-                rep += f'{repr(self.arguments[0])}={repr(self.arguments[1])}'
-            if is_relation(self.root):
-                rep += self.root
-                args = []
-                for arg in self.arguments:
-                    args.append(repr(arg))
-                args = ','.join(args)
-                rep += f'({args})'
-            if is_unary(self.root):
-                rep += f'~{self.first}'
-            if is_binary(self.root):
-                rep += f'({repr(self.first)}{self.root}{repr(self.second)})'
-            if is_quantifier(self.root):
-                rep += f'{self.root}{self.variable}[{repr(self.predicate)}]'
-        return rep
+        if is_variable(self.root) or is_constant(self.root):
+            return self.root
+        elif is_equality(self.root):
+            return str(self.arguments[0]) + "=" + str(self.arguments[1])
+        elif is_unary(self.root):
+            return self.root + str(self.first)
+        elif is_quantifier(self.root):
+            return self.root + self.variable + "[" + str(self.predicate) + "]"
+        elif is_binary(self.root):
+            return "(" + str(self.first) + self.root + str(self.second) + ")"
+        elif is_relation(self.root):
+            arguments = self.arguments
+            relation_string = self.root + "("
+            if len(arguments) == 0:
+                relation_string = relation_string + ")"
+            for i in range(len(arguments)):
+                if i < len(arguments) - 1:
+                    relation_string = relation_string + str(arguments[i]) + ","
+                else:
+                    relation_string = relation_string + str(arguments[i]) + ")"
+            return relation_string
+        else:
+            raise Exception("unknown syntax")
         # Task 7.2
 
     def __eq__(self, other: object) -> bool:
