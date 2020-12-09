@@ -25,14 +25,17 @@ from predicates.functions import *
 #
 
 # print(equality_to_relation(Formula.parse("z1=g(x,y,z)")))
-formula1 = Formula.parse("R(g(x),f(x))")
-formula2 = Formula.parse("R(plus(f(0),g(h(x))))")
-formula = formula2
-compiled_terms = list()
-for term in formula.arguments:
-    compiled_terms.extend(_compile_term(term))
-new_list = [*compiled_terms, create_relation_with_z(formula2, compiled_terms)]
-print(multiple_equality_to_relation(compiled_terms))
-print(new_list)
-print(concatenate_relation(new_list))
-print(replace_functions_with_relations_in_formula(formula2))
+# formula1 = Formula.parse("R(g(x),f(x))")
+# formula2 = Formula.parse("R(plus(f(0),g(h(x))))")
+# formula = formula2
+# compiled_terms = list()
+# for term in formula.arguments:
+#     compiled_terms.extend(_compile_term(term))
+# new_list = [*compiled_terms, create_relation_with_z(formula2, compiled_terms)]
+# print(multiple_equality_to_relation(compiled_terms))
+# print(new_list)
+# print(concatenate_relation(new_list))
+# print(replace_functions_with_relations_in_formula(formula2))
+
+f=Formula.parse("Ax1[Ax2[Ay1[Ay2[(({eq}(x1,y1)&{eq}(x2,y2))->({r}(x1,x2)->{r}(y1,y2)))]]]]".format(eq="SAME", r='R'))
+print(f)

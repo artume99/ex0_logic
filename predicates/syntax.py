@@ -666,15 +666,67 @@ class Formula:
     @memoized_parameterless_method
     def free_variables(self) -> Set[str]:
         """Finds all variable names that are free in the current formula.
-
         Returns:
             A set of every variable name that is used in the current formula not
             only within a scope of a quantification on that variable name.
         """
-        if not self.FREE_VAR_SET:
-            self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
-        return self.FREE_VAR_SET
         # Task 7.6.3
+        free_variables = set()
+        forbidden = set()
+        return self.free_variables_helper(free_variables, forbidden)
+
+    @staticmethod
+    def handle_forbidden(variables: set, forbidden: set):
+        """
+        method to clean forbidden-s out of variables
+        Args:
+            variables: given variables
+            forbidden: given forbidden variables
+        Returns: set of non forbidden-s
+        """
+        new_set = set()
+        for var in variables:
+            if var not in forbidden:
+                new_set.add(var)
+        return new_set
+
+    def free_variables_helper(self, free_variables: set, forbidden: set):
+        """
+        method to handle free variables
+        Args:
+            free_variables: free variables till now
+            forbidden: forbiddens till now
+        Returns:
+        """
+        if is_equality(self.root):
+            first_sub_vars = self.arguments[0].variables()
+            second_sub_vars = self.arguments[1].variables()
+            variables = first_sub_vars.union(second_sub_vars)
+            variables = Formula.handle_forbidden(variables, forbidden)
+            free_variables = free_variables.union(variables)
+        elif is_relation(self.root):
+            arguments = self.arguments
+            for arg in arguments:
+                sub_variables = arg.variables()
+                free_variables = free_variables.union(sub_variables)
+            free_variables = Formula.handle_forbidden(free_variables,
+                                                      forbidden)
+        elif is_unary(self.root) | is_binary(self.root):
+            free_variables = free_variables.union(self.first.free_variables())
+            free_variables = Formula.handle_forbidden(free_variables,
+                                                      forbidden)
+        if is_binary(self.root):
+            free_variables = free_variables.union(self.second.free_variables())
+            free_variables = Formula.handle_forbidden(free_variables,
+                                                      forbidden)
+        elif is_quantifier(self.root):
+            var = self.variable
+            forbidden.add(var)
+            free_variables = free_variables.union(
+                self.predicate.free_variables())
+            free_variables = Formula.handle_forbidden(free_variables,
+                                                      forbidden)
+        return free_variables
 
     @memoized_parameterless_method
     def functions(self) -> Set[Tuple[str, int]]:
@@ -703,6 +755,33 @@ class Formula:
         if not self.RELATION_SET:
             self.set_creator(self.FUNC_SET, self.CONST_SET, self.VAR_SET, self.RELATION_SET, self.FREE_VAR_SET)
         return self.RELATION_SET
+
+    def formula_relations_helper(self, relations: set):
+        """
+        helper method for formula functions finder
+        Args:
+            relations: functions till now
+        Returns: all formula functions
+        """
+        if is_equality(self.root):
+            first_sub_rels = self.arguments[0].relations()
+            second_sub_rels = self.arguments[1].relations()
+            relations = relations.union(first_sub_rels)
+            relations = relations.union(second_sub_rels)
+        elif is_relation(self.root):
+            arguments = self.arguments
+            arg_len = len(arguments)
+            relations.add((self.root, arg_len))
+            for arg in arguments:
+                sub_relations = arg.relations()
+                relations = relations.union(sub_relations)
+        elif is_unary(self.root) | is_binary(self.root):
+            relations = relations.union(self.first.relations())
+        if is_binary(self.root):
+            relations = relations.union(self.second.relations())
+        elif is_quantifier(self.root):
+            relations = relations.union(self.predicate.relations())
+        return relations
 
     def substitute(self, substitution_map: Mapping[str, Term],
                    forbidden_variables: AbstractSet[str] = frozenset()) -> \

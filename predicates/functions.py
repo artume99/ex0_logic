@@ -6,8 +6,8 @@
 
 """Syntactic conversion of predicate-logic formulas to not use functions and
 equality."""
-
-from typing import AbstractSet, List, Set
+import itertools
+from typing import AbstractSet, List, Set, Dict
 
 from logic_utils import fresh_variable_name_generator
 
@@ -253,10 +253,10 @@ def concatenate_relation(formulas: List[Formula], i: int = 0) -> Formula:
     if i == len(formulas) - 1:
         new_formulas = multiple_equality_to_relation(formulas[:-1])
         new_formulas = '&'.join(new_formulas)
-        return Formula('->', Formula.parse(create_written_formula(new_formulas, '&')), formulas[i])
+        return Formula('&', Formula.parse(create_written_formula(new_formulas, '&')), formulas[i])
     new_relation = equality_to_relation(formulas[i])
     var = new_relation.arguments[0].root
-    new_formula = Formula('A', var, concatenate_relation(formulas, i + 1))
+    new_formula = Formula('E', var, concatenate_relation(formulas, i + 1))
     return new_formula
 
 
@@ -320,9 +320,7 @@ def multiple_equality_to_relation(formulas: List[Formula]) -> list:
     return new_formula
 
 
-def replace_functions_with_relations_in_formulas(formulas:
-AbstractSet[Formula]) -> \
-        Set[Formula]:
+def replace_functions_with_relations_in_formulas(formulas: AbstractSet[Formula]) -> Set[Formula]:
     """Syntactically converts the given set of formulas to a set of formulas
     that do not contain any function invocations, and is "two-way
     equivalent" in the sense that:
@@ -361,7 +359,57 @@ AbstractSet[Formula]) -> \
     for formula in formulas:
         for variable in formula.variables():
             assert variable[0] != 'z'
+    formulas_set = set()
+    for formula in formulas:
+        replaced_formula = replace_functions_with_relations_in_formula(formula)
+        formulas_set.add(replaced_formula)
+        for relation in replaced_formula.relations():
+            if relation in formula.relations():
+                continue
+            # for every x there is a y
+            additional_formula = Formula('A', 'x',
+                                         Formula('E', 'z', Formula(relation[0], [Term.parse('z'), Term.parse('x')])))
+            # If 2 x's gives us the same y, then x1=x2
+            additional_formula2 = Formula.parse(
+                "Ax[Az1[Az2[(({F}(z1,x)&{F}(z2,x))->z1=z2)]]]".format(F=relation[0]))
+            super_additional = Formula('&', additional_formula, additional_formula2)
+            formulas_set.add(super_additional)
+    return formulas_set
     # Task 8.5
+
+
+EQ_RELATION = "SAME"
+def replace_equality_with_SAME_in_formula(formula: Formula) -> Formula:
+    new_formula = None
+    if is_equality(formula.root):
+        new_relation_name = EQ_RELATION
+        return Formula(new_relation_name, formula.arguments)
+    if is_relation(formula.root):
+        return formula
+    if is_binary(formula.root):
+        first_formula = replace_equality_with_SAME_in_formula(formula.first)
+        second_formula = replace_equality_with_SAME_in_formula(formula.second)
+        new_formula = Formula(formula.root, first_formula, second_formula)
+
+    if is_unary(formula.root):
+        first_formula = replace_equality_with_SAME_in_formula(formula.first)
+        new_formula = Formula(formula.root, first_formula)
+
+    if is_quantifier(formula.root):
+        predicate_formula = replace_equality_with_SAME_in_formula(formula.predicate)
+        new_formula = Formula(formula.root, formula.variable, predicate_formula)
+    return new_formula
+
+
+REQUIREMENTS = {"reflexive": lambda rel: Formula.parse("Ax[{relation}(x,x)]".format(relation=rel)),
+                "symmetry": lambda rel: Formula.parse(
+                    "Ax[Ay[({relation}(x,y)->{relation}(y,x))]]".format(relation=rel)),
+                "transitivity": lambda rel: Formula.parse(
+                    "Ax[Ay[Az[(({relation}(x,y)&{relation}(y,z))->{relation}(x,z))]]]".format(relation=rel)),
+                "unary_R": lambda eq, rel: Formula.parse("Ax[Ay[({eq}(x,y)->({r}(x)->{r}(y)))]]".format(eq=eq, r=rel)),
+                "binary_R": lambda eq, rel: Formula.parse(
+                    "Ax1[Ax2[Ay1[Ay2[(({eq}(x1,y1)&{eq}(x2,y2))->({r}(x1,x2)->{r}(y1,y2)))]]]]".format(eq=eq, r=rel))
+                }
 
 
 def replace_equality_with_SAME_in_formulas(formulas: AbstractSet[Formula]) -> \
@@ -390,6 +438,21 @@ def replace_equality_with_SAME_in_formulas(formulas: AbstractSet[Formula]) -> \
         assert len(formula.functions()) == 0
         assert 'SAME' not in \
                {relation for relation, arity in formula.relations()}
+    formulas_set = set()
+    for formula in formulas:
+        compiled_formula = replace_equality_with_SAME_in_formula(formula)
+        formulas_set.add(compiled_formula)
+        ref_and_sym = Formula("&", REQUIREMENTS["reflexive"](EQ_RELATION), REQUIREMENTS["symmetry"](EQ_RELATION))
+        ref_and_sym_and_tran = Formula("&", ref_and_sym, REQUIREMENTS["transitivity"](EQ_RELATION))
+        for relation in formula.relations():
+            if relation[1] == 1:
+                unary_req_and_bi_req = REQUIREMENTS["unary_R"](EQ_RELATION, relation[0])
+            else:
+                unary_req_and_bi_req = REQUIREMENTS["binary_R"](EQ_RELATION, relation[0])
+            all_req = Formula('&', ref_and_sym_and_tran, unary_req_and_bi_req)
+            formulas_set.add(all_req)
+    return formulas_set
+
     # Task 8.6
 
 
@@ -408,6 +471,16 @@ def add_SAME_as_equality_in_model(model: Model[T]) -> Model[T]:
         the given model.
     """
     assert 'SAME' not in model.relation_meanings
+    universe = model.universe
+    constants = model.constant_meanings
+    functions = model.function_meanings
+    relations = dict(model.relation_meanings)
+    new_relation_name = EQ_RELATION
+    new_relation_set = set()
+    for om in universe:
+        new_relation_set.add(tuple([om, om]))
+    relations.update({new_relation_name: new_relation_set})
+    return Model(universe, constants, relations, functions)
     # Task 8.7
 
 
@@ -434,4 +507,28 @@ def make_equality_as_SAME_in_model(model: Model[T]) -> Model[T]:
     assert 'SAME' in model.relation_meanings and \
            model.relation_arities['SAME'] == 2
     assert len(model.function_meanings) == 0
-    # Task 8.8
+#     universe = set(model.universe)
+#     constants = dict(model.constant_meanings)
+#     functions = dict(model.function_meanings)
+#     relations = dict(model.relation_meanings)
+#     eq_relation_meaning = sorted(list(relations[EQ_RELATION]))
+#     eq_classes = {}
+#     # for key, group in itertools.groupby(eq_relation_meaning, lambda k: k[0]):
+#     #     eq_classes[key] = list(group)
+#     # for key in eq_classes:
+#     #     for ls in eq_classes[key]:
+#     #         if ls[0] != ls[1]:
+#     #             eq_classes[ls]
+#     # print(eq_classes)
+#     create_eq_classes(eq_relation_meaning)
+#     return Model(universe, constants, relations, functions)
+#     # Task 8.8
+#
+#
+# def create_eq_classes(classes: List):
+#     eq_classes: Dict[set] = {}
+#     for tup in classes:
+#         print(*eq_classes.values())
+#         if tup[0] not in eq_classes:
+#             eq_classes[tup[0]] = set()
+#         eq_classes[tup[0]].add(tup[1])
