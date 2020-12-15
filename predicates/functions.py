@@ -379,6 +379,8 @@ def replace_functions_with_relations_in_formulas(formulas: AbstractSet[Formula])
 
 
 EQ_RELATION = "SAME"
+
+
 def replace_equality_with_SAME_in_formula(formula: Formula) -> Formula:
     new_formula = None
     if is_equality(formula.root):
@@ -490,13 +492,11 @@ def make_equality_as_SAME_in_model(model: Model[T]) -> Model[T]:
     formulas holds in the returned model if and only if its canonically
     corresponding set of formulas that do not contain equality holds in the
     given model.
-
     Parameters:
         model: model to convert, that contains no function meanings, and
             contains a meaning for the relation name ``'SAME'`` that is
             reflexive, symmetric, transitive, and respected by the meanings
             of all other relation names.
-
     Returns:
         A model that is a model for any set `formulas` if and only if
         the given model is a model for
@@ -507,28 +507,99 @@ def make_equality_as_SAME_in_model(model: Model[T]) -> Model[T]:
     assert 'SAME' in model.relation_meanings and \
            model.relation_arities['SAME'] == 2
     assert len(model.function_meanings) == 0
-#     universe = set(model.universe)
-#     constants = dict(model.constant_meanings)
-#     functions = dict(model.function_meanings)
-#     relations = dict(model.relation_meanings)
-#     eq_relation_meaning = sorted(list(relations[EQ_RELATION]))
-#     eq_classes = {}
-#     # for key, group in itertools.groupby(eq_relation_meaning, lambda k: k[0]):
-#     #     eq_classes[key] = list(group)
-#     # for key in eq_classes:
-#     #     for ls in eq_classes[key]:
-#     #         if ls[0] != ls[1]:
-#     #             eq_classes[ls]
-#     # print(eq_classes)
-#     create_eq_classes(eq_relation_meaning)
-#     return Model(universe, constants, relations, functions)
-#     # Task 8.8
-#
-#
-# def create_eq_classes(classes: List):
-#     eq_classes: Dict[set] = {}
-#     for tup in classes:
-#         print(*eq_classes.values())
-#         if tup[0] not in eq_classes:
-#             eq_classes[tup[0]] = set()
-#         eq_classes[tup[0]].add(tup[1])
+
+    constants = dict(model.constant_meanings)
+    functions = dict(model.function_meanings)
+    relations = dict(model.relation_meanings)
+    eq_relation_meaning = sorted(list(relations[EQ_RELATION]))
+    eq_classes = {}
+
+    create_eq_classes(eq_classes, eq_relation_meaning)
+
+    new_universe = set(eq_classes.keys())
+    new_constants = dismiss_constants(constants, eq_classes)
+    new_relations = dismiss_relations(relations, eq_classes)
+
+    model = Model(new_universe, new_constants, new_relations, functions)
+    return model
+    # Task 8.8
+
+
+def dismiss_constants(constants: dict, eq_classes: dict):
+    """
+    changed constants to new ones according to new eq classes
+    """
+    constant_keys = constants.keys()
+    constants = constants.copy()
+    for const in constant_keys:
+        if constants[const] not in eq_classes.keys():
+            constants[const] = get_translation(constants[const], eq_classes)
+    return constants
+
+
+def get_translation(name: str, eq_classes: dict):
+    """
+    trnaslated name out of constants to eq translation we got for it
+    """
+    for key in eq_classes.keys():
+        if name in eq_classes[key]:
+            return key
+
+
+def dismiss_relations(relations: dict, eq_classes: dict):
+    """
+    fix up relations under new eq classes
+    """
+    new_relations = dict()
+
+    for rel in relations.keys():
+        if rel == "SAME":
+            # dismissing same
+            continue
+        relation_set = list()
+        for tup in relations[rel]:
+            check = True
+            for arg in tup:
+                if arg not in eq_classes.keys():
+                    check = False
+            if check:
+                relation_set.append(tup)
+        new_relations[rel] = relation_set
+    return new_relations
+
+
+def remove_through_iteration(dupe_classes, tup, eq_classes):
+    """
+    remove values from classes through iteration
+    Args:
+        dupe_classes: duplicate of classes
+        tup:  the tuple
+        eq_classes: equality classes
+    Returns: dupe_classes with only allowed values
+    """
+    for values in eq_classes.values():
+        for dup_tup in dupe_classes:
+            if (dup_tup[0] in values) | (dup_tup[1] in values):
+                dupe_classes.remove(dup_tup)
+
+
+def create_eq_classes(eq_classes, classes: List):
+    """
+    eq classes dictionary maker
+    Args:
+        eq_classes: empty dictionary
+        classes: classes
+    Returns: corrected dictionary
+    """
+    dup_classes = classes.copy()
+    for tup in classes:
+        for key in eq_classes.keys():
+            item = eq_classes[key]
+            if tup[0] in item:
+                eq_classes[key].add(tup[1])
+        remove_through_iteration(dup_classes, tup, eq_classes)
+        if tup not in dup_classes:
+            continue
+        if tup[0] not in eq_classes:
+            eq_classes[tup[0]] = set()
+            eq_classes[tup[0]].add(tup[1])
