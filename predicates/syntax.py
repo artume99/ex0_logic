@@ -82,6 +82,12 @@ def is_function(string: str) -> bool:
     return string[0] >= 'f' and string[0] <= 't' and string.isalnum()
 
 
+def check_forbidden(variables: set, forbidden_variables):
+    for var in variables:
+        if var in forbidden_variables:
+            raise ForbiddenVariableError(var)
+
+
 @frozen
 class Term:
     """An immutable predicate-logic term in tree representation, composed from
@@ -311,6 +317,22 @@ class Term:
             assert is_constant(element_name) or is_variable(element_name)
         for variable in forbidden_variables:
             assert is_variable(variable)
+        if self.root in substitution_map:  # Checks if the current root needs to be replaced
+            sub_term = substitution_map[self.root]
+            if is_variable(sub_term.root):
+                check_forbidden(set(sub_term.root), forbidden_variables)
+                return Term(sub_term.root)
+            if is_constant(sub_term.root):
+                return Term(sub_term.root)
+            if is_function(sub_term.root):
+                check_forbidden(sub_term.variables(), forbidden_variables)
+                return Term(sub_term.root, sub_term.arguments)
+
+        if is_function(self.root):
+            sub_args = [arg.substitute(substitution_map, forbidden_variables) for arg in self.arguments]
+            return Term(self.root, sub_args)
+        return self  # If no change needed return the current term
+
         # Task 9.1
 
 
@@ -828,6 +850,19 @@ class Formula:
             assert is_constant(element_name) or is_variable(element_name)
         for variable in forbidden_variables:
             assert is_variable(variable)
+        if is_relation(self.root) or is_equality(self.root):
+            sub_args = [arg.substitute(substitution_map, forbidden_variables) for arg in self.arguments]
+            return Formula(self.root, sub_args)
+        if is_binary(self.root):
+            return Formula(self.root, self.first.substitute(substitution_map, forbidden_variables),
+                           self.second.substitute(substitution_map, forbidden_variables))
+        if is_unary(self.root):
+            return Formula(self.root, self.first.substitute(substitution_map, forbidden_variables))
+        if is_quantifier(self.root):
+            extended_forbidden = set(forbidden_variables).union(self.variable)
+            new_sub_map = {var: sub for var, sub in substitution_map.items() if var != self.variable}
+            return Formula(self.root, self.variable, self.predicate.substitute(new_sub_map, extended_forbidden))
+        return self  # If no change needed return the current term
         # Task 9.2
 
     def propositional_skeleton(self) -> Tuple[PropositionalFormula,
