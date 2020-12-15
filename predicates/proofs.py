@@ -248,6 +248,7 @@ class Schema:
         for variable in bound_variables:
             assert is_variable(variable)
         new_formula = None
+        # Base cases
         if is_relation(formula.root) and formula.root not in relations_instantiation_map or is_equality(formula.root):
             new_formula = formula.substitute(constants_and_variables_instantiation_map, set())
         elif is_relation(formula.root) and formula.root in relations_instantiation_map and len(formula.arguments) == 0:
@@ -397,7 +398,31 @@ class Schema:
             else:
                 assert is_relation(key)
                 assert isinstance(instantiation_map[key], Formula)
+        if not set(instantiation_map.keys()).issubset(self.templates):
+            return None
+        relation_dict, constant_and_var_dict = create_dict_for_instantiate(instantiation_map)
+        try:
+            result = Schema._instantiate_helper(self.formula, constant_and_var_dict, relation_dict, set())
+        except (self.BoundVariableError, ForbiddenVariableError) as e:
+            return None
+        return result
+
         # Task 9.4
+
+
+def create_dict_for_instantiate(instantiation_map: InstantiationMap) -> \
+        Tuple[InstantiationMap, InstantiationMap]:
+    relation_dict = {}
+    constant_and_var_dict = {}
+    # bounded_set = set()
+    for value, sub in instantiation_map.items():
+        if is_relation(value):
+            relation_dict[value] = sub
+        if is_constant(value) or is_variable(value):
+            # if type(sub) is str:
+            #     bounded_set.add(sub)
+            constant_and_var_dict[value] = Term.parse(str(sub))
+    return relation_dict, constant_and_var_dict
 
 
 @frozen
