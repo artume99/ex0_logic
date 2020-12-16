@@ -526,6 +526,11 @@ class Proof:
                 ``False`` otherwise.
             """
             assert line_number < len(lines) and lines[line_number] is self
+            if self.assumption not in assumptions:  # Check if our assumption is part of the available assumptions
+                return False
+            sub_assumption = self.assumption.instantiate(self.instantiation_map)
+            return self.formula == sub_assumption
+
             # Task 9.5
 
     @frozen
@@ -591,6 +596,14 @@ class Proof:
                 current line; ``False`` otherwise.
             """
             assert line_number < len(lines) and lines[line_number] is self
+            if self.antecedent_line_number >= line_number or self.conditional_line_number >= line_number:
+                return False
+            line1 = lines[self.antecedent_line_number]
+            line2 = lines[self.conditional_line_number]
+            mp_scheme = Schema(Formula.parse("((R()&(R()->Q()))->Q())"), {'R', 'Q'})
+            value = mp_scheme.instantiate({'R': line1.formula, 'Q': self.formula})
+            return value.first.second == line2.formula
+
             # Task 9.6
 
     @frozen
@@ -646,6 +659,12 @@ class Proof:
                 variable name; ``False`` otherwise.
             """
             assert line_number < len(lines) and lines[line_number] is self
+            if self.predicate_line_number >= line_number:
+                return False
+            if not self.formula.root == 'A':
+                return False
+            predicate_line = lines[self.predicate_line_number]
+            return self.formula.predicate == predicate_line.formula
             # Task 9.7
 
     @frozen
@@ -730,7 +749,7 @@ class Proof:
 from propositions.proofs import Proof as PropositionalProof, \
     InferenceRule as PropositionalInferenceRule, \
     SpecializationMap as \
-        PropositionalSpecializationMap
+        PropositionalSpecializationMap, InferenceRule
 from propositions.axiomatic_systems import AXIOMATIC_SYSTEM as \
     PROPOSITIONAL_AXIOMATIC_SYSTEM, \
     MP, I0, I1, D, I2, N, NI, NN, R
