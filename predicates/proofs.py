@@ -708,6 +708,8 @@ class Proof:
                 (predicate-logic) tautology, ``False`` otherwise.
             """
             assert line_number < len(lines) and lines[line_number] is self
+            propositional_formula = self.formula.propositional_skeleton()[0]
+            return is_propositional_tautology(propositional_formula)
             # Task 9.9
 
     #: An immutable proof line.
@@ -837,6 +839,13 @@ def _axiom_specialization_map_to_schema_instantiation_map(
             assert is_unary(operator) or is_binary(operator)
     for key in substitution_map:
         assert is_propositional_variable(key)
+    relation_to_formula = dict()
+    for key, formula in propositional_specialization_map.items():
+        relation_key = key.upper()
+        real_formula = Formula.from_propositional_skeleton(formula, substitution_map)
+        relation_to_formula[relation_key] = real_formula
+    return relation_to_formula
+
     # Task 9.11.1
 
 
@@ -871,6 +880,24 @@ def _prove_from_skeleton_proof(formula: Formula,
     for line in skeleton_proof.lines:
         for operator in line.formula.operators():
             assert is_unary(operator) or is_binary(operator)
+
+    assumptions = PROPOSITIONAL_AXIOMATIC_SYSTEM_SCHEMAS
+    conclusion = formula
+    lines = []
+    for num, line in enumerate(skeleton_proof.lines):
+        if line.rule == MP:
+            formula = Formula.from_propositional_skeleton(line.formula, substitution_map)
+            line = Proof.MPLine(formula, line.assumptions[0], line.assumptions[1])
+        else:  # since it is a proof of a tautology, there is only mp lines and axiom lines.
+            assumption = PROPOSITIONAL_AXIOM_TO_SCHEMA[line.rule]
+            instantiation_map = _axiom_specialization_map_to_schema_instantiation_map(
+                line.rule.specialization_map(skeleton_proof.rule_for_line(num)), substitution_map)
+            line = Proof.AssumptionLine(Formula.from_propositional_skeleton(line.formula, substitution_map),
+                                        assumption, instantiation_map)
+        lines.append(line)
+    proof = Proof(assumptions, conclusion, lines)
+    return proof
+
     # Task 9.11.2
 
 
@@ -886,4 +913,8 @@ def prove_tautology(tautology: Formula) -> Proof:
         and MP lines.
     """
     assert is_propositional_tautology(tautology.propositional_skeleton()[0])
+    propositional_tautology, sub_map = tautology.propositional_skeleton()
+    proof_to_convert = prove_propositional_tautology(propositional_tautology)
+    proof = _prove_from_skeleton_proof(tautology, proof_to_convert, sub_map)
+    return proof
     # Task 9.12

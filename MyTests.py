@@ -37,5 +37,8 @@ from predicates.functions import *
 # print(concatenate_relation(new_list))
 # print(replace_functions_with_relations_in_formula(formula2))
 
-f=Formula.parse("Ax1[Ax2[Ay1[Ay2[(({eq}(x1,y1)&{eq}(x2,y2))->({r}(x1,x2)->{r}(y1,y2)))]]]]".format(eq="SAME", r='R'))
-print(f)
+# f=Formula.parse("Ax1[Ax2[Ay1[Ay2[(({eq}(x1,y1)&{eq}(x2,y2))->({r}(x1,x2)->{r}(y1,y2)))]]]]".format(eq="SAME", r='R'))
+# print(f)
+
+formula = Formula.parse('((Ax[x=7]&x=7)|(x=7->~Q(y)))')
+formula.propositional_skeleton()

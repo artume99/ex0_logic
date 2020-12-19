@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 from functools import lru_cache
-from typing import AbstractSet, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import AbstractSet, Mapping, Optional, Sequence, Set, Tuple, Union, Dict
 
 from logic_utils import fresh_variable_name_generator, frozen, \
     memoized_parameterless_method
@@ -889,7 +889,37 @@ class Formula:
             >>> formula.propositional_skeleton()
             (((z4&z5)|(z5->~z6)), {'z4': Ax[x=7], 'z5': x=7, 'z6': Q(y)})
         """
+        skeleton = {}
+        new_formula = self.compile_formula(skeleton)
+        return new_formula, skeleton
         # Task 9.8
+
+    def compile_formula(self, skeleton: Dict[str, Formula], reversed_skeleton=None) -> Formula:
+        """
+        compiles the formula for the needed skeleton, as well as updating the mapping between every z to its formula
+        representative
+        :param skeleton: str to formula
+        :param reversed_skeleton: formula to str
+        :return: compiled formula
+        """
+        if reversed_skeleton is None:
+            reversed_skeleton = dict()
+        if is_binary(self.root):
+            compiled_formula1 = self.first.compile_formula(skeleton, reversed_skeleton)
+            compiled_formula2 = self.second.compile_formula(skeleton, reversed_skeleton)
+            compiled_formula = PropositionalFormula(self.root, compiled_formula1, compiled_formula2)
+        elif is_unary(self.root):
+            compiled_formula1 = self.first.compile_formula(skeleton, reversed_skeleton)
+            compiled_formula = PropositionalFormula(self.root, compiled_formula1)
+        else:
+            if self in reversed_skeleton:
+                return reversed_skeleton[self]
+            z = next(fresh_variable_name_generator)
+            parsed_z = PropositionalFormula.parse(z)
+            skeleton[z] = self
+            reversed_skeleton[self] = parsed_z
+            return parsed_z
+        return compiled_formula
 
     @staticmethod
     def from_propositional_skeleton(skeleton: PropositionalFormula,
@@ -921,4 +951,16 @@ class Formula:
             assert is_unary(operator) or is_binary(operator)
         for variable in skeleton.variables():
             assert variable in substitution_map
+        if is_propositional_variable(skeleton.root):
+            return substitution_map[skeleton.root]
+        formula = None
+        if is_binary(skeleton.root):
+            formula1 = Formula.from_propositional_skeleton(skeleton.first, substitution_map)
+            formula2 = Formula.from_propositional_skeleton(skeleton.second, substitution_map)
+            formula = Formula(skeleton.root, formula1, formula2)
+        if is_unary(skeleton.root):
+            formula1 = Formula.from_propositional_skeleton(skeleton.first, substitution_map)
+            formula = Formula(skeleton.root, formula1)
+        return formula
+
         # Task 9.10
