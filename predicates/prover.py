@@ -16,6 +16,39 @@ from predicates.syntax import *
 from predicates.proofs import *
 
 
+# def skeleton(formula, mapping: dict, reversed_mapping: dict, sub_map: dict) -> Union[Formula, Term, str]:
+#     if is_relation(formula.root) or is_equality(formula.root):
+#         args = [helper(arg, mapping, reversed_mapping, sub_map) for arg in formula.arguments]
+#         fo = Formula(formula.root, args)
+#     if is_binary(formula.root):
+#         f1 = skeleton(formula.first, mapping, reversed_mapping, sub_map)
+#         f2 = skeleton(formula.second, mapping, reversed_mapping, sub_map)
+#         fo = Formula(formula.root, f1, f2)
+#     if is_unary(formula.root):
+#         f1 = skeleton(formula.first, mapping, reversed_mapping, sub_map)
+#         fo = Formula(formula.root, f1)
+#     if is_quantifier(formula.root):
+#         predicate = skeleton(formula.predicate, mapping, reversed_mapping, sub_map)
+#         fo = Formula(formula.root, formula.variable, predicate)
+#     return fo
+#
+#
+# def helper(term: Term, mapping: dict, reversed_mapping: dict, sub_map: dict) -> Term:
+#     if is_variable(term.root):
+#         if term.root not in sub_map:
+#             return term
+#         if term.root not in mapping:
+#             z = next(fresh_variable_name_generator)
+#             mapping[term.root] = z
+#             reversed_mapping[z] = term.root
+#         else:
+#             z = mapping[term.root]
+#         return Term(z)
+#     if is_function(term.root):
+#         args = [helper(arg, mapping, reversed_mapping, sub_map) for arg in term.arguments]
+#         return Term(term.root, args)
+
+
 def create_tautology(assumptions: List[Formula], conclusion: Formula):
     """
     Creates a tautology out of an inference
@@ -398,7 +431,7 @@ class Prover:
         assert line_number2 < len(self._lines)
         conditional = self._lines[line_number2].formula
         assert conditional == Formula('->', quantified.predicate, consequent)
-        print(quantified.variable, consequent.free_variables())
+
         line_set = {line_number1}
         predicate = self._lines[line_number2].formula
         var = quantified.variable
@@ -437,6 +470,20 @@ class Prover:
         equality = self._lines[line_number].formula
         assert equality == Formula('=', [flipped.arguments[1],
                                          flipped.arguments[0]])
+        c = equality.arguments[0]
+        d = equality.arguments[1]
+        sub_map = {"R": Formula.parse("_={c}".format(c=c)), "c": c, "d": d}
+        instantiated_assumption = self.ME.instantiate(sub_map)
+        line1 = self.add_instantiated_assumption(instantiated_assumption, self.ME, sub_map)
+
+        second_formula = self._lines[line1].formula.second
+        line2 = self.add_mp(second_formula, line_number, line1)
+
+        instantiated_assumption = "{c}={c}".format(c=c)
+        line3 = self.add_instantiated_assumption(instantiated_assumption, self.RX, {"c": c})
+        line4 = self.add_mp(flipped, line3, line2)
+        return len(self._lines) - 1
+
         # Task 10.6
 
     def add_free_instantiation(self, instantiation: Union[Formula, str],
@@ -490,6 +537,26 @@ class Prover:
                self._lines[line_number].formula.substitute(substitution_map)
         for variable in instantiation.variables():
             assert variable[0] != 'z'
+
+        formula = self._lines[line_number].formula
+        to_z_sub_map = {var: Term(next(fresh_variable_name_generator)) for var in
+                        substitution_map}  # Creates a map from the free variables to freshly generated z
+        from_z_sub_map = {z: substitution_map[var] for var, z in
+                          to_z_sub_map.items()}  # Creates a map from freshly generated z to the substituted variable
+
+        line = line_number
+        for var, z in to_z_sub_map.items():
+            quantifier = Formula.parse("A{var}[{formula}]".format(var=var, formula=formula))
+            line = self.add_ug(quantifier, line)
+            formula = quantifier.predicate.substitute({var: z})
+            line = self.add_universal_instantiation(formula, line, z)
+
+        for z, var in from_z_sub_map.items():
+            quantifier = Formula.parse("A{z}[{formula}]".format(z=z, formula=formula))
+            line = self.add_ug(quantifier, line)
+            formula = quantifier.predicate.substitute({str(z): var})
+            line = self.add_universal_instantiation(formula, line, var)
+        return len(self._lines) - 1
         # Task 10.7
 
     def add_substituted_equality(self, substituted: Union[Formula, str],
@@ -534,6 +601,24 @@ class Prover:
                    {'_': equality.arguments[0]}),
                    parametrized_term.substitute(
                        {'_': equality.arguments[1]})])
+        c, d = equality.arguments
+        new_c = parametrized_term.substitute({"_": c})
+
+        sub_map = {"R": Formula.parse("{c}={t}".format(t=parametrized_term, c=new_c)),
+                   "c": c, "d": d}
+        formula = self.ME.instantiate(sub_map)
+        line1 = self.add_instantiated_assumption(formula, self.ME, sub_map)
+
+        formula = self._lines[line1].formula.second
+        line2 = self.add_mp(formula, line_number, line1)
+
+        formula = "{c}={c}".format(c=new_c)
+        sub_map = {"c": new_c}
+        line3 = self.add_instantiated_assumption(formula, self.RX, sub_map)
+
+        formula = self._lines[line2].formula.second
+        line4 = self.add_mp(formula, line3, line2)
+        return len(self._lines) - 1
         # Task 10.8
 
     def _add_chaining_of_two_equalities(self, line_number1: int,
@@ -566,6 +651,21 @@ class Prover:
         equality2 = self._lines[line_number2].formula
         assert is_equality(equality2.root)
         assert equality1.arguments[1] == equality2.arguments[0]
+        first, second = equality1.arguments
+        third = equality2.arguments[1]
+        # flipping equality for later use of double mp
+        line1 = self.add_flipped_equality(f'{second}={first}', line_number1)
+        # Using ME to create second=third->first=third
+        sub_map = {"R": Formula.parse(f"_={third}"), "c": second, "d": first}
+        formula = self.ME.instantiate(sub_map)
+        line2 = self.add_instantiated_assumption(formula, self.ME, sub_map)
+        # Double MP
+        formula = self._lines[line2].formula.second
+        line3 = self.add_mp(formula, line1, line2)
+
+        formula = self._lines[line3].formula.second
+        line4 = self.add_mp(formula, line_number2, line3)
+        return len(self._lines) - 1
         # Task 10.9.1
 
     def add_chained_equality(self, chained: Union[Formula, str],
@@ -611,4 +711,10 @@ class Prover:
             assert equality.arguments[0] == current_term
             current_term = equality.arguments[1]
         assert chained.arguments[1] == current_term
+
+        current_line = line_numbers[0]
+        for line in line_numbers[1:]:
+            current_line = self._add_chaining_of_two_equalities(current_line, line)
+
+        return len(self._lines) - 1
         # Task 10.9.2
