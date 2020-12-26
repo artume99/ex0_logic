@@ -8,12 +8,26 @@
 using them."""
 
 from typing import AbstractSet, Collection, FrozenSet, List, Mapping, \
-                   Sequence, Tuple, Union
+    Sequence, Tuple, Union
 
 from logic_utils import fresh_variable_name_generator
 
 from predicates.syntax import *
 from predicates.proofs import *
+
+
+def create_tautology(assumptions: List[Formula], conclusion: Formula):
+    """
+    Creates a tautology out of an inference
+    :param assumptions:
+    :param conclusion:
+    :return:
+    """
+    formula = str(conclusion)
+    for assumption in reversed(assumptions):
+        formula = "({assum}->{f})".format(assum=assumption, f=formula)
+    return Formula.parse(formula)
+
 
 class Prover:
     """A class for gradually creating a predicate-logic proof from given
@@ -54,7 +68,7 @@ class Prover:
     AXIOMS = frozenset({UI, EI, US, ES, RX, ME})
 
     def __init__(self, assumptions: Collection[Union[Schema, Formula, str]],
-                 print_as_proof_forms: bool=False):
+                 print_as_proof_forms: bool = False):
         """Initializes a `Prover` from its assumptions/additional axioms. The
         proof created by the prover initially has no lines.
 
@@ -70,7 +84,7 @@ class Prover:
             Prover.AXIOMS.union(
                 {assumption if isinstance(assumption, Schema)
                  else Schema(assumption) if isinstance(assumption, Formula)
-                 else Schema(Formula.parse(assumption))
+                else Schema(Formula.parse(assumption))
                  for assumption in assumptions})
         self._lines = []
         self._print_as_proof_forms = print_as_proof_forms
@@ -78,7 +92,7 @@ class Prover:
             print('Proving from assumptions/axioms:\n'
                   '  AXIOMS')
             for assumption in self._assumptions - Prover.AXIOMS:
-                  print('  ' + str(assumption))
+                print('  ' + str(assumption))
             print('Lines:')
 
     def qed(self) -> Proof:
@@ -154,7 +168,7 @@ class Prover:
                     assert isinstance(value, Formula)
         return self._add_line(Proof.AssumptionLine(instance, assumption,
                                                    instantiation_map))
-        
+
     def add_assumption(self, unique_instance: Union[Formula, str]) -> int:
         """Appends to the proof being created by the current prover a line that
         validly justifies the unique instance of one of the assumptions/axioms
@@ -268,7 +282,7 @@ class Prover:
                             line.predicate_line_number + line_shift)
         line_number = len(self._lines) - 1
         assert self._lines[line_number].formula == conclusion
-        return line_number                
+        return line_number
 
     def add_universal_instantiation(self, instantiation: Union[Formula, str],
                                     line_number: int, term: Union[Term, str]) \
@@ -306,6 +320,17 @@ class Prover:
             term = Term.parse(term)
         assert instantiation == \
                quantified.predicate.substitute({quantified.variable: term})
+        x = quantified.variable
+        r = self._lines[line_number].formula.predicate
+        r = r.substitute({x: Term.parse("_")})
+
+        ui_line = self.UI.instantiate({'R': r, "x": x, "c": term})
+        sub_map = {'R': r, "x": x, "c": term}
+        self.add_instantiated_assumption(ui_line, self.UI, sub_map)
+        antecedent_line = line_number
+        conditional_line = len(self._lines) - 1
+        self.add_mp(instantiation, antecedent_line, conditional_line)
+        return len(self._lines) - 1
         # Task 10.1
 
     def add_tautological_implication(self, implication: Union[Formula, str],
@@ -329,6 +354,16 @@ class Prover:
             implication = Formula.parse(implication)
         for line_number in line_numbers:
             assert line_number < len(self._lines)
+        sorted_line_numbers = sorted(line_numbers)
+        assumptions = [self._lines[i].formula for i in sorted_line_numbers]
+        conclusion = implication
+        tautology = create_tautology(assumptions, conclusion)
+        self.add_tautology(tautology)
+        for assumption, line_num in zip(assumptions, sorted_line_numbers):
+            last_idx = len(self._lines) - 1
+            last_form = self._lines[last_idx].formula.second
+            self.add_mp(last_form, line_num, last_idx)
+        return len(self._lines) - 1
         # Task 10.2
 
     def add_existential_derivation(self, consequent: Union[Formula, str],
@@ -363,6 +398,18 @@ class Prover:
         assert line_number2 < len(self._lines)
         conditional = self._lines[line_number2].formula
         assert conditional == Formula('->', quantified.predicate, consequent)
+        print(quantified.variable, consequent.free_variables())
+        line_set = {line_number1}
+        predicate = self._lines[line_number2].formula
+        var = quantified.variable
+        line_set.add(self.add_ug(Formula.parse("A{var}[{form}]".format(form=predicate, var=var)), line_number2))
+        q = conditional.second
+        r = quantified.predicate.substitute({quantified.variable: Term.parse("_")})
+        es_sub_map = {'R': r, 'Q': q, 'x': var}
+        es_line = self.ES.instantiate(es_sub_map)
+        line_set.add(self.add_instantiated_assumption(es_line, self.ES, es_sub_map))
+        self.add_tautological_implication(consequent, line_set)
+        return len(self._lines) - 1
         # Task 10.3
 
     def add_flipped_equality(self, flipped: Union[Formula, str],
@@ -484,9 +531,9 @@ class Prover:
             parametrized_term = Term.parse(parametrized_term)
         assert substituted == \
                Formula('=', [parametrized_term.substitute(
-                                 {'_': equality.arguments[0]}),
-                             parametrized_term.substitute(
-                                 {'_': equality.arguments[1]})])
+                   {'_': equality.arguments[0]}),
+                   parametrized_term.substitute(
+                       {'_': equality.arguments[1]})])
         # Task 10.8
 
     def _add_chaining_of_two_equalities(self, line_number1: int,

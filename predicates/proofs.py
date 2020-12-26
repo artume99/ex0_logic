@@ -596,13 +596,22 @@ class Proof:
                 current line; ``False`` otherwise.
             """
             assert line_number < len(lines) and lines[line_number] is self
-            if self.antecedent_line_number >= line_number or self.conditional_line_number >= line_number:
+            if (self.antecedent_line_number >= line_number) | (
+                    self.conditional_line_number >= line_number) | (
+                    self.antecedent_line_number == self.conditional_line_number) | (
+                    self.antecedent_line_number >= len(lines)) | (
+                    self.conditional_line_number >= len(lines)):
                 return False
-            line1 = lines[self.antecedent_line_number]
-            line2 = lines[self.conditional_line_number]
-            mp_scheme = Schema(Formula.parse("((R()&(R()->Q()))->Q())"), {'R', 'Q'})
-            value = mp_scheme.instantiate({'R': line1.formula, 'Q': self.formula})
-            return value.first.second == line2.formula
+
+            line_formula = self.formula
+            MP_antecedent = lines[self.antecedent_line_number].formula
+            MP_conditional = lines[self.conditional_line_number].formula
+
+            if (MP_conditional.second != line_formula) | (
+                    MP_conditional.first != MP_antecedent):
+                return False
+
+            return True
 
             # Task 9.6
 

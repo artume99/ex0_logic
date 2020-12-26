@@ -11,8 +11,10 @@ from propositions.axiomatic_systems import *
 from propositions.deduction_test import *
 from propositions.tautology import *
 
+from predicates.prover import *
 from predicates.syntax import *
 from predicates.functions import *
+from predicates.some_proofs import *
 
 # Term._parse_prefix("plus(s(x),3)")
 # print(Term._parse_prefix("plus(s(x),3)"))
@@ -40,5 +42,16 @@ from predicates.functions import *
 # f=Formula.parse("Ax1[Ax2[Ay1[Ay2[(({eq}(x1,y1)&{eq}(x2,y2))->({r}(x1,x2)->{r}(y1,y2)))]]]]".format(eq="SAME", r='R'))
 # print(f)
 
-formula = Formula.parse('((Ax[x=7]&x=7)|(x=7->~Q(y)))')
-formula.propositional_skeleton()
+# formula = Formula.parse('((Ax[x=7]&x=7)|(x=7->~Q(y)))')
+# formula.propositional_skeleton()
+
+# prover = Prover({'Ex[Q(x)]'}, True)
+# step1 = prover.add_assumption('Ex[Q(x)]')
+# step2 = prover.add_instantiated_assumption("(Ax[~Q(x)]->~Q(x))", prover.UI, {'R': "~Q(_)", "c": "x", "x": "x"})
+# step3 = prover.add_tautological_implication("(Q(x)->~Ax[~Q(x)])", {step2})
+# # step4 = prover.add_ug("Ax[(Q(x)->~Ax[~Q(x)])]", step3)
+# # step5 = prover.add_universal_instantiation("(Q(x)->~Ax[~Q(x)])", step4, "x")
+# step6 = prover.add_existential_derivation("~Ax[~Q(x)]", step1, step3)
+
+# print(is_tautology(Formula.parse("((p&q)->(~(p&r)->(q&~r)))")))
+# print(is_tautology(Formula.parse("(~(p&q)->(p&~q))")))
