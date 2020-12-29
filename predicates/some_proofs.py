@@ -388,6 +388,29 @@ def unique_zero_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover(GROUP_AXIOMS.union({'plus(a,c)=a'}), print_as_proof_forms)
+    main_assumption = prover.add_assumption("plus(a,c)=a")
+    flipped_main_assumption = prover.add_flipped_equality("a=plus(a,c)", main_assumption)
+    zero = prover.add_assumption('plus(0,x)=x')
+    negation = prover.add_assumption('plus(minus(x),x)=0')
+    associativity = prover.add_assumption('plus(plus(x,y),z)=plus(x,plus(y,z))')
+    flipped_zero = prover.add_flipped_equality('x=plus(0,x)', zero)
+    flipped_negation = prover.add_flipped_equality(
+        '0=plus(minus(x),x)', negation)
+    flipped_associativity = prover.add_flipped_equality(
+        'plus(x,plus(y,z))=plus(plus(x,y),z)', associativity)
+    ins_negation = prover.add_free_instantiation("0=plus(minus(a),a)", flipped_negation, {"x": "a"})
+    flipped_ins_negation = prover.add_flipped_equality("plus(minus(a),a)=0", ins_negation)
+
+    step1 = prover.add_substituted_equality("plus(minus(a),a)=plus(minus(a),plus(a,c))", flipped_main_assumption,
+                                            "plus(minus(a),_)")
+    step2 = prover.add_free_instantiation("plus(minus(a),plus(a,c))=plus(plus(minus(a),a),c)",
+                                          flipped_associativity, {"x": "minus(a)", "y": "a", "z": "c"})
+    step3 = prover.add_substituted_equality("plus(plus(minus(a),a),c)=plus(0,c)", flipped_ins_negation, "plus(_,c)")
+    chained = prover.add_chained_equality("0=plus(0,c)", [ins_negation, step1, step2, step3])
+    step4 = prover.add_free_instantiation("plus(0,c)=c", zero, {"x": "c"})
+    step5 = prover.add_chained_equality("0=c", [chained, step4])
+    step6 = prover.add_flipped_equality("c=0", step5)
+
     # Task 10.10
     return prover.qed()
 
@@ -411,6 +434,60 @@ def multiply_zero_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover(FIELD_AXIOMS, print_as_proof_forms)
+    # In the next assumptions and proof in general, a stands for addition, m for multiplication
+
+    # ___________________________GROUP AXIOMS_____________________________ #
+    zero = prover.add_assumption('plus(0,x)=x')
+    negation = prover.add_assumption('plus(minus(x),x)=0')
+    a_associativity = prover.add_assumption('plus(plus(x,y),z)=plus(x,plus(y,z))')
+
+    flipped_zero = prover.add_flipped_equality('x=plus(0,x)', zero)
+    flipped_negation = prover.add_flipped_equality(
+        '0=plus(minus(x),x)', negation)
+    flipped_a_associativity = prover.add_flipped_equality(
+        'plus(x,plus(y,z))=plus(plus(x,y),z)', a_associativity)
+
+    # __________________________FIELD AXIOMS________________________________ #
+    a_commutativity = prover.add_assumption('plus(x,y)=plus(y,x)')
+    m_commutativity = prover.add_assumption('times(x,y)=times(y,x)')
+    one = prover.add_assumption('times(x,1)=x')
+    m_associativity = prover.add_assumption('times(times(x,y),z)=times(x,times(y,z))')
+    distributivity = prover.add_assumption('times(x,plus(y,z))=plus(times(x,y),times(x,z))')
+    inverse = prover.add_assumption('(~x=0->Ey[times(y,x)=1])')
+
+    flipped_a_commutativity = prover.add_flipped_equality('plus(y,x)=plus(x,y)', a_commutativity)
+    flipped_m_commutativity = prover.add_flipped_equality('times(y,x)=times(x,y)', m_commutativity)
+    flipped_one = prover.add_flipped_equality('x=times(x,1)', one)
+    flipped_m_associativity = prover.add_flipped_equality('times(x,times(y,z))=times(times(x,y),z)', m_associativity)
+    flipped_distributivity = prover.add_flipped_equality('plus(times(x,y),times(x,z))=times(x,plus(y,z))',
+                                                         distributivity)
+
+    # ___________________________PROOF START_________________________________ #
+    step1 = prover.add_free_instantiation("0=plus(0,0)", flipped_zero, {"x": "0"})
+    step2 = prover.add_substituted_equality("times(x,0)=times(x,plus(0,0))", step1, "times(x,_)")
+    step3 = prover.add_free_instantiation("times(x,plus(0,0))=plus(times(x,0),times(x,0))", distributivity,
+                                          {"x": "x", "y": "0", "z": "0"})
+    step4 = prover.add_chained_equality("times(x,0)=plus(times(x,0),times(x,0))", [step2, step3])
+    # PROOF OF PLUS(A,C)=A -> C=0
+    ins_negation = prover.add_free_instantiation("0=plus(minus(times(x,0)),times(x,0))", flipped_negation,
+                                                 {"x": "times(x,0)"})
+    flipped_ins_negation = prover.add_flipped_equality("plus(minus(times(x,0)),times(x,0))=0", ins_negation)
+
+    step5 = prover.add_substituted_equality(
+        "plus(minus(times(x,0)),times(x,0))=plus(minus(times(x,0)),plus(times(x,0),times(x,0)))", step4,
+        "plus(minus(times(x,0)),_)")
+    step6 = prover.add_free_instantiation(
+        "plus(minus(times(x,0)),plus(times(x,0),times(x,0)))=plus(plus(minus(times(x,0)),times(x,0)),times(x,0))",
+        flipped_a_associativity, {"x": "minus(times(x,0))", "y": "times(x,0)", "z": "times(x,0)"})
+    step7 = prover.add_substituted_equality("plus(plus(minus(times(x,0)),times(x,0)),times(x,0))=plus(0,times(x,0))",
+                                            flipped_ins_negation, "plus(_,times(x,0))")
+    chained = prover.add_chained_equality("0=plus(0,times(x,0))", [ins_negation, step5, step6, step7])
+    step8 = prover.add_free_instantiation("plus(0,times(x,0))=times(x,0)", zero, {"x": "times(x,0)"})
+    step9 = prover.add_chained_equality("0=times(x,0)", [chained, step8])
+    step10 = prover.add_free_instantiation("times(x,0)=times(0,x)", m_commutativity, {"x": "x", "y": "0"})
+    step11 = prover.add_chained_equality("0=times(0,x)", [step9, step10])
+    step12 = prover.add_flipped_equality("times(0,x)=0", step11)
+
     # Task 10.11
     return prover.qed()
 
