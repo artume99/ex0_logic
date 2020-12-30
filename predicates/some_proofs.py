@@ -514,6 +514,39 @@ def peano_zero_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover(PEANO_AXIOMS, print_as_proof_forms)
+    # _________________________AXIOMS_________________________ #
+    same_successor = prover.add_assumption("(s(x)=s(y)->x=y)")
+    zero_first = prover.add_assumption("~s(x)=0")
+    zero_add = prover.add_assumption("plus(x,0)=x")
+    successor_addition = prover.add_assumption("plus(x,s(y))=s(plus(x,y))")
+    zero_mult = prover.add_assumption("times(x,0)=0")
+    successor_multiplication = prover.add_assumption("times(x,s(y))=plus(times(x,y),x)")
+
+    flipped_zero_add = prover.add_flipped_equality("x=plus(x,0)", zero_add)
+    flipped_successor_addition = prover.add_flipped_equality("s(plus(x,y))=plus(x,s(y))", successor_addition)
+    flipped_zero_mult = prover.add_flipped_equality("0=times(x,0)", zero_mult)
+    flipped_multiplication = prover.add_flipped_equality("plus(times(x,y),x)=times(x,s(y))", successor_multiplication)
+
+    # ________________________PROOF START_______________________ #
+    base_case = prover.add_free_instantiation("plus(0,0)=0", zero_add, {"x": "0"})
+
+    step1 = prover.add_free_instantiation("plus(0,s(x))=s(plus(0,x))", successor_addition, {"x": "0", "y": "x"})
+
+    sub_map = {"R": Formula.parse("plus(0,s(x))=s(_)"),
+               "c": Term.parse("plus(0,x)"),
+               "d": Term.parse("x")}
+    step2 = prover.add_instantiated_assumption("(plus(0,x)=x->(plus(0,s(x))=s(plus(0,x))->plus(0,s(x))=s(x)))",
+                                               prover.ME, sub_map)
+
+    step3 = prover.add_tautological_implication("(plus(0,x)=x->plus(0,s(x))=s(x)))", {step1, step2})
+    step4 = prover.add_ug("Ax[(plus(0,x)=x->plus(0,s(x))=s(x)))]", step3)
+
+    induction_map = {"R": Formula.parse("plus(0,_)=_")}
+    inst_induction = INDUCTION_AXIOM.instantiate(induction_map)
+    step5 = prover.add_instantiated_assumption(inst_induction, INDUCTION_AXIOM, induction_map)
+    step6 = prover.add_tautological_implication("Ax[plus(0,x)=x]", {base_case, step4, step5})
+    step7 = prover.add_universal_instantiation("plus(0,x)=x", step6, "x")
+
     # Task 10.12
     return prover.qed()
 
@@ -536,6 +569,22 @@ def russell_paradox_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover({COMPREHENSION_AXIOM}, print_as_proof_forms)
+
+    ui_map = {"R": Formula.parse("((In(_,y)->~In(_,_))&(~In(_,_)->In(_,y)))"), 'x': "x", "c": Term.parse("y")}
+    ui_inst = prover.UI.instantiate(ui_map)
+    step1 = prover.add_instantiated_assumption(ui_inst, prover.UI, ui_map)
+
+    false = "(((In(y,y)->~In(y,y))&(~In(y,y)->In(y,y)))->(z=z&~z=z))"  # we have false -> false, and its always true
+    step2 = prover.add_tautology(false)
+
+    step3 = prover.add_instantiated_assumption("Ey[Ax[((In(x,y)->~In(x,x))&(~In(x,x)->In(x,y)))]]", COMPREHENSION_AXIOM,
+                                               {"R": "~In(_,_)"})
+
+    paradox = "(Ax[((In(x,y)->~In(x,x))&(~In(x,x)->In(x,y)))]->(z=z&~z=z))"
+    step4 = prover.add_tautological_implication(paradox, {step1, step2})
+
+    step6 = prover.add_existential_derivation("(z=z&~z=z)", step3, step4)
+
     # Task 10.13
     return prover.qed()
 
