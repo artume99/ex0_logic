@@ -228,15 +228,48 @@ def lovers_proof(print_as_proof_forms: bool = False) -> Proof:
                      'Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]'},
                     print_as_proof_forms)
     # Task 10.4
-    step1 = prover.add_assumption('Ax[Ey[Loves(x,y)]]')
-    step2 = prover.add_assumption('Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]')
-    step3 = prover.add_universal_instantiation("Ey[Loves(x,y)]", step1, 'x')
-    step4 = prover.add_universal_instantiation("Az[Ay[(Loves(x,y)->Loves(z,x))]]", step2, 'x')
-    step5 = prover.add_universal_instantiation("Ay[(Loves(x,y)->Loves(z,x))]", step4, 'z')
-    step6 = prover.add_universal_instantiation("(Loves(x,y)->Loves(z,x))", step5, "y")
-    step7 = prover.add_existential_derivation("Loves(z,x)", step3, step6)
-    step8 = prover.add_ug("Az[Loves(z,x)]", step7)
-    step9 = prover.add_ug("Ax[Az[Loves(z,x)]]", step8)
+    assump_1_form = Formula.parse("Ax[Ey[Loves(x,y)]]")
+    first_assumption = prover.add_assumption(assump_1_form)
+
+    # Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]
+    assump_2_form = Formula.parse("Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]")
+    second_assumption = prover.add_assumption(assump_2_form)
+
+    exists_y_loves_x_y = "Ey[Loves(x,y)]"
+    exists_loves_x_y_index = prover.add_universal_instantiation(
+        exists_y_loves_x_y,
+        first_assumption,
+        assump_1_form.variable)
+
+    x_clean_index = prover.add_universal_instantiation(
+        "Az[Ay[(Loves(x,y)->Loves(z,x))]]",
+        second_assumption,
+        assump_2_form.variable)
+
+    all_y_loves_to_love = "Ay[(Loves(x,y)->Loves(z,x))]"
+    a_var = "z"
+    z_clean_index = prover.add_universal_instantiation(
+        all_y_loves_to_love,
+        x_clean_index,
+        a_var)
+
+    loves_to_love = "(Loves(x,y)->Loves(z,x))"
+    a_var = "y"
+    y_clean_index = prover.add_universal_instantiation(
+        loves_to_love,
+        z_clean_index,
+        a_var)
+
+    loves_z_x = "Loves(z,x)"
+    e_s_line = prover.add_existential_derivation(loves_z_x,
+                                                 exists_loves_x_y_index,
+                                                 y_clean_index)
+
+    all_z = "Az[Loves(z,x)]"
+    all_y = "Ax[" + all_z + "]"
+
+    all_z_index = prover.add_ug(all_z, e_s_line)
+    prover.add_ug(all_y, all_z_index)
     return prover.qed()
 
 
@@ -258,19 +291,49 @@ def homework_proof(print_as_proof_forms: bool = False) -> Proof:
     """
     prover = Prover({'~Ex[(Homework(x)&Fun(x))]',
                      'Ex[(Homework(x)&Reading(x))]'}, print_as_proof_forms)
-    step1 = prover.add_assumption("~Ex[(Homework(x)&Fun(x))]")
-    step2 = prover.add_assumption("Ex[(Homework(x)&Reading(x))]")
-    step3 = prover.add_instantiated_assumption("((Homework(x)&Fun(x))->Ex[(Homework(x)&Fun(x))])", prover.EI,
-                                               {"R": "(Homework(_)&Fun(_))", "x": "x", "c": "x"})
-    step4 = prover.add_tautological_implication("(~Ex[(Homework(x)&Fun(x))]->~(Homework(x)&Fun(x)))", {step3})
-    step5 = prover.add_mp("~(Homework(x)&Fun(x))", step1, step4)
-    step6 = prover.add_instantiated_assumption("((Reading(x)&~Fun(x))->Ex[(Reading(x)&~Fun(x))])", prover.EI,
-                                               {"R": "(Reading(_)&~Fun(_))", "x": "x", "c": "x"})
-    step7 = prover.add_tautological_implication(
-        "((Homework(x)&Reading(x))->(Reading(x)&~Fun(x))))", {step5})
-    step8 = prover.add_tautological_implication("((Homework(x)&Reading(x))->Ex[(Reading(x)&~Fun(x))])",
-                                                {step6, step7})
-    step9 = prover.add_existential_derivation("Ex[(Reading(x)&~Fun(x))]", step2, step8)
+    assump_1_form = Formula.parse("~Ex[(Homework(x)&Fun(x)]")
+    first_assumption = prover.add_assumption(assump_1_form)
+
+    # Ex[(Homework(x)&Reading(x))]
+    assump_2_form = Formula.parse("Ex[(Homework(x)&Reading(x))]")
+    second_assumption = prover.add_assumption(assump_2_form)
+
+    EI_form = Formula.parse("((Homework(x)&Fun(x))->Ex[(Homework(x)&Fun(x))])")
+    ei_dict = {"R": "(Homework(_)&Fun(_))",
+               "x": "x",
+               "c": "x"
+               }
+    ei_line = prover.add_instantiated_assumption(EI_form, Prover.EI, ei_dict)
+
+    taut_line = Formula.parse(
+        "(~Ex[(Homework(x)&Fun(x))]->~(Homework(x)&Fun(x)))")
+    tautulogy_line = prover.add_tautological_implication(taut_line, {ei_line})
+
+    not_all_homework_fun = Formula.parse("~(Homework(x)&Fun(x))")
+    mp_line = prover.add_mp(not_all_homework_fun, first_assumption,
+                            tautulogy_line)
+
+    EI_form = Formula.parse("((Reading(x)&~Fun(x))->Ex[(Reading(x)&~Fun(x))])")
+    ei_dict = {"R": "(Reading(_)&~Fun(_))",
+               "x": "x",
+               "c": "x"
+               }
+    ei_2_line = prover.add_instantiated_assumption(EI_form, Prover.EI, ei_dict)
+
+    taut_line_2 = Formula.parse("((Homework(x)&Reading(x))->(Reading(x)&~Fun("
+                                "x)))")
+    tautulogy_line_2 = prover.add_tautological_implication(taut_line_2,
+                                                           {mp_line})
+
+    taut_line_3 = Formula.parse(
+        "((Homework(x)&Reading(x))->Ex[(Reading(x)&~Fun(x))])")
+    tautulogy_line_3 = prover.add_tautological_implication(taut_line_3,
+                                                           {ei_2_line,
+                                                            tautulogy_line_2})
+
+    existence = Formula.parse("Ex[(Reading(x)&~Fun(x))]")
+    prover.add_existential_derivation(existence,
+                                      second_assumption, tautulogy_line_3)
     # Task 10.5
     return prover.qed()
 
@@ -388,28 +451,63 @@ def unique_zero_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover(GROUP_AXIOMS.union({'plus(a,c)=a'}), print_as_proof_forms)
-    main_assumption = prover.add_assumption("plus(a,c)=a")
-    flipped_main_assumption = prover.add_flipped_equality("a=plus(a,c)", main_assumption)
+    # __________GROUP AXIOMS__________ #
     zero = prover.add_assumption('plus(0,x)=x')
     negation = prover.add_assumption('plus(minus(x),x)=0')
-    associativity = prover.add_assumption('plus(plus(x,y),z)=plus(x,plus(y,z))')
+    a_associativity = prover.add_assumption(
+        'plus(plus(x,y),z)=plus(x,plus(y,z))')
+
     flipped_zero = prover.add_flipped_equality('x=plus(0,x)', zero)
     flipped_negation = prover.add_flipped_equality(
         '0=plus(minus(x),x)', negation)
-    flipped_associativity = prover.add_flipped_equality(
-        'plus(x,plus(y,z))=plus(plus(x,y),z)', associativity)
-    ins_negation = prover.add_free_instantiation("0=plus(minus(a),a)", flipped_negation, {"x": "a"})
-    flipped_ins_negation = prover.add_flipped_equality("plus(minus(a),a)=0", ins_negation)
+    flipped_a_associativity = prover.add_flipped_equality(
+        'plus(x,plus(y,z))=plus(plus(x,y),z)', a_associativity)
+    first_line = "plus(a,c)=a"
+    first_assump_line = prover.add_assumption(first_line)
 
-    step1 = prover.add_substituted_equality("plus(minus(a),a)=plus(minus(a),plus(a,c))", flipped_main_assumption,
-                                            "plus(minus(a),_)")
-    step2 = prover.add_free_instantiation("plus(minus(a),plus(a,c))=plus(plus(minus(a),a),c)",
-                                          flipped_associativity, {"x": "minus(a)", "y": "a", "z": "c"})
-    step3 = prover.add_substituted_equality("plus(plus(minus(a),a),c)=plus(0,c)", flipped_ins_negation, "plus(_,c)")
-    chained = prover.add_chained_equality("0=plus(0,c)", [ins_negation, step1, step2, step3])
-    step4 = prover.add_free_instantiation("plus(0,c)=c", zero, {"x": "c"})
-    step5 = prover.add_chained_equality("0=c", [chained, step4])
-    step6 = prover.add_flipped_equality("c=0", step5)
+    instance = Formula.parse(
+        "plus(minus(a),plus(a,c))=plus(plus(minus(a),a),c)")
+
+    sub_map = {"x": "minus(a)",
+               "y": "a",
+               "z": "c"}
+    minus_plus_ = prover.add_free_instantiation(instance,
+                                                flipped_a_associativity,
+                                                sub_map)
+
+    instance = Formula.parse("plus(minus(a),a)=0")
+    sub_map = {"x": "a"}
+    negation_c = prover.add_free_instantiation(instance, negation, sub_map)
+
+    sub = "plus(plus(minus(a),a),c)=plus(0,c)"
+    param_term = "plus(_,c)"
+    plus_minus = prover.add_substituted_equality(sub, negation_c, param_term)
+
+    chained_lines = [minus_plus_, plus_minus]
+    chained = "plus(minus(a),plus(a,c))=plus(0,c)"
+    chained_line = prover.add_chained_equality(chained, chained_lines)
+
+    sub = "plus(minus(a),plus(a,c))=plus(minus(a),a)"
+    param_term = "plus(minus(a),_)"
+    after_first_assump = prover.add_substituted_equality(sub,
+                                                         first_assump_line,
+                                                         param_term)
+
+    sub = "plus(0,c)=plus(minus(a),plus(a,c))"
+    flipped_chained = prover.add_flipped_equality(sub, chained_line)
+
+    instance = Formula.parse("c=plus(0,c)")
+    sub_map = {"x": "c"}
+    c_is_0_c = prover.add_free_instantiation(instance, flipped_zero, sub_map)
+
+    instance = Formula.parse("plus(minus(a),a)=0")
+    sub_map = {"x": "a"}
+    a_minus_a_0 = prover.add_free_instantiation(instance, negation, sub_map)
+
+    chained_lines = [c_is_0_c, flipped_chained, after_first_assump,
+                     a_minus_a_0]
+    chained = "c=0"
+    chained_line = prover.add_chained_equality(chained, chained_lines)
 
     # Task 10.10
     return prover.qed()
@@ -514,39 +612,69 @@ def peano_zero_proof(print_as_proof_forms: bool = False) -> Proof:
         `~predicates.prover.Prover.AXIOMS`.
     """
     prover = Prover(PEANO_AXIOMS, print_as_proof_forms)
-    # _________________________AXIOMS_________________________ #
-    same_successor = prover.add_assumption("(s(x)=s(y)->x=y)")
-    zero_first = prover.add_assumption("~s(x)=0")
-    zero_add = prover.add_assumption("plus(x,0)=x")
-    successor_addition = prover.add_assumption("plus(x,s(y))=s(plus(x,y))")
-    zero_mult = prover.add_assumption("times(x,0)=0")
-    successor_multiplication = prover.add_assumption("times(x,s(y))=plus(times(x,y),x)")
-
-    flipped_zero_add = prover.add_flipped_equality("x=plus(x,0)", zero_add)
-    flipped_successor_addition = prover.add_flipped_equality("s(plus(x,y))=plus(x,s(y))", successor_addition)
-    flipped_zero_mult = prover.add_flipped_equality("0=times(x,0)", zero_mult)
-    flipped_multiplication = prover.add_flipped_equality("plus(times(x,y),x)=times(x,s(y))", successor_multiplication)
+    # # _________________________AXIOMS_________________________ #
+    # same_successor = prover.add_assumption("(s(x)=s(y)->x=y)")
+    # zero_first = prover.add_assumption("~s(x)=0")
+    # zero_add = prover.add_assumption("plus(x,0)=x")
+    # successor_addition = prover.add_assumption("plus(x,s(y))=s(plus(x,y))")
+    # zero_mult = prover.add_assumption("times(x,0)=0")
+    # successor_multiplication = prover.add_assumption("times(x,s(y))=plus(times(x,y),x)")
+    #
+    # flipped_zero_add = prover.add_flipped_equality("x=plus(x,0)", zero_add)
+    # flipped_successor_addition = prover.add_flipped_equality("s(plus(x,y))=plus(x,s(y))", successor_addition)
+    # flipped_zero_mult = prover.add_flipped_equality("0=times(x,0)", zero_mult)
+    # flipped_multiplication = prover.add_flipped_equality("plus(times(x,y),x)=times(x,s(y))", successor_multiplication)
 
     # ________________________PROOF START_______________________ #
-    base_case = prover.add_free_instantiation("plus(0,0)=0", zero_add, {"x": "0"})
+    axiom_1 = prover.add_assumption("(s(x)=s(y)->x=y)")
+    axiom_2 = prover.add_assumption("~s(x)=0")
+    axiom_3 = prover.add_assumption("plus(x,0)=x")
+    axiom_4 = prover.add_assumption("plus(x,s(y))=s(plus(x,y))")
+    axiom_5 = prover.add_assumption("times(x,0)=0")
+    axiom_6 = prover.add_assumption("times(x,s(y))=plus(times(x,y),x)")
 
-    step1 = prover.add_free_instantiation("plus(0,s(x))=s(plus(0,x))", successor_addition, {"x": "0", "y": "x"})
+    # axiom_7 = prover.add_assumption("((R(0)&Ax[(R(x)->R(s(x)))])->Ax[R(x)])")
+
+    sub_map = {"x": "0"}
+    instance = "plus(0,0)=0"
+    base_induction = prover.add_free_instantiation(instance, axiom_3, sub_map)
+
+    sub_map = {"x": "0",
+               "y": "x"}
+    instance = "plus(0,s(x))=s(plus(0,x))"
+    s_0_plus = prover.add_free_instantiation(instance, axiom_4, sub_map)
 
     sub_map = {"R": Formula.parse("plus(0,s(x))=s(_)"),
                "c": Term.parse("plus(0,x)"),
                "d": Term.parse("x")}
-    step2 = prover.add_instantiated_assumption("(plus(0,x)=x->(plus(0,s(x))=s(plus(0,x))->plus(0,s(x))=s(x)))",
-                                               prover.ME, sub_map)
 
-    step3 = prover.add_tautological_implication("(plus(0,x)=x->plus(0,s(x))=s(x)))", {step1, step2})
-    step4 = prover.add_ug("Ax[(plus(0,x)=x->plus(0,s(x))=s(x)))]", step3)
+    # (plus(0,x)=x->plus(0,s(x))=s(plus(0,x))->plus(0,s(x))=s(x)))
+    me_instantiation = prover.ME.instantiate(sub_map)
+    apply_ME = prover.add_instantiated_assumption(me_instantiation, prover.ME,
+                                                  sub_map)
 
-    induction_map = {"R": Formula.parse("plus(0,_)=_")}
-    inst_induction = INDUCTION_AXIOM.instantiate(induction_map)
-    step5 = prover.add_instantiated_assumption(inst_induction, INDUCTION_AXIOM, induction_map)
-    step6 = prover.add_tautological_implication("Ax[plus(0,x)=x]", {base_case, step4, step5})
-    step7 = prover.add_universal_instantiation("plus(0,x)=x", step6, "x")
+    # plus(0,s(x))=s(plus(0,x)) is true, a->b->c
+    taut = prover.add_tautological_implication(
+        "(plus(0,x)=x->plus(0,s(x))=s(x))", {s_0_plus, apply_ME})
 
+    quantified = Formula.parse("Ax[(plus(0,x)=x->plus(0,s(x))=s(x))]")
+    ug_line = prover.add_ug(quantified, taut)
+
+    # induction :  "((R(0)&Ax[(R(x)->R(s(x)))])->Ax[R(x)])"
+    sub_map = {"R": "plus(0,_)=_"}
+    instance = \
+        "((plus(0,0)=0&Ax[(plus(0,x)=x->plus(0,s(x))=s(x))])->Ax[plus(0,x)=x])"
+    using_induction = prover.add_instantiated_assumption(instance,
+                                                         INDUCTION_AXIOM,
+                                                         sub_map)
+    final_line = "Ax[plus(0,x)=x]"
+    taut_of_ands = prover.add_tautological_implication(final_line,
+                                                       {base_induction,
+                                                        ug_line,
+                                                        using_induction})
+
+    ui_line = "plus(0,x)=x"
+    conclusion_line = prover.add_universal_instantiation(ui_line, taut_of_ands, "x")
     # Task 10.12
     return prover.qed()
 

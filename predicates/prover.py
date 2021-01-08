@@ -16,39 +16,6 @@ from predicates.syntax import *
 from predicates.proofs import *
 
 
-# def skeleton(formula, mapping: dict, reversed_mapping: dict, sub_map: dict) -> Union[Formula, Term, str]:
-#     if is_relation(formula.root) or is_equality(formula.root):
-#         args = [helper(arg, mapping, reversed_mapping, sub_map) for arg in formula.arguments]
-#         fo = Formula(formula.root, args)
-#     if is_binary(formula.root):
-#         f1 = skeleton(formula.first, mapping, reversed_mapping, sub_map)
-#         f2 = skeleton(formula.second, mapping, reversed_mapping, sub_map)
-#         fo = Formula(formula.root, f1, f2)
-#     if is_unary(formula.root):
-#         f1 = skeleton(formula.first, mapping, reversed_mapping, sub_map)
-#         fo = Formula(formula.root, f1)
-#     if is_quantifier(formula.root):
-#         predicate = skeleton(formula.predicate, mapping, reversed_mapping, sub_map)
-#         fo = Formula(formula.root, formula.variable, predicate)
-#     return fo
-#
-#
-# def helper(term: Term, mapping: dict, reversed_mapping: dict, sub_map: dict) -> Term:
-#     if is_variable(term.root):
-#         if term.root not in sub_map:
-#             return term
-#         if term.root not in mapping:
-#             z = next(fresh_variable_name_generator)
-#             mapping[term.root] = z
-#             reversed_mapping[z] = term.root
-#         else:
-#             z = mapping[term.root]
-#         return Term(z)
-#     if is_function(term.root):
-#         args = [helper(arg, mapping, reversed_mapping, sub_map) for arg in term.arguments]
-#         return Term(term.root, args)
-
-
 def create_tautology(assumptions: List[Formula], conclusion: Formula):
     """
     Creates a tautology out of an inference

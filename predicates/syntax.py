@@ -859,7 +859,8 @@ class Formula:
         if is_unary(self.root):
             return Formula(self.root, self.first.substitute(substitution_map, forbidden_variables))
         if is_quantifier(self.root):
-            extended_forbidden = set(forbidden_variables).union(self.variable)
+            extended_forbidden = set(forbidden_variables)
+            extended_forbidden.add(self.variable)
             new_sub_map = {var: sub for var, sub in substitution_map.items() if var != self.variable}
             return Formula(self.root, self.variable, self.predicate.substitute(new_sub_map, extended_forbidden))
         return self  # If no change needed return the current term

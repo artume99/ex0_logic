@@ -10,11 +10,14 @@ from predicates.functions import _compile_term
 # from propositions.axiomatic_systems import *
 # from propositions.deduction_test import *
 # from propositions.tautology import *
+from predicates.prenex import _uniquely_rename_quantified_variables
 
 from predicates.prover import *
 from predicates.syntax import *
 from predicates.functions import *
 from predicates.some_proofs import *
+from predicates.deduction import *
+from predicates.prenex import *
 
 # Term._parse_prefix("plus(s(x),3)")
 # print(Term._parse_prefix("plus(s(x),3)"))
@@ -56,40 +59,13 @@ from predicates.some_proofs import *
 # print(is_tautology(Formula.parse("((p&q)->(~(p&r)->(q&~r)))")))
 # print(is_tautology(Formula.parse("(~(p&q)->(p&~q))")))
 
-f = Formula.parse("plus(x,y)=plus(y,x)")
-mapping = dict()
-
-
-def skeleton(formula, mapping: dict) -> Union[Formula, Term, str]:
-    if is_relation(formula.root) or is_equality(formula.root):
-        args = [helper(arg, mapping) for arg in formula.arguments]
-        fo = Formula(formula.root, args)
-    if is_binary(formula.root):
-        f1 = skeleton(formula.first, mapping)
-        f2 = skeleton(formula.second, mapping)
-        fo = Formula(formula.root, f1, f2)
-    if is_unary(formula.root):
-        f1 = skeleton(formula.first, mapping)
-        fo = Formula(formula.root, f1)
-    if is_quantifier(formula.root):
-        predicate = skeleton(formula.predicate, mapping)
-        fo = Formula(formula.root, formula.variable, predicate)
-    return fo
-
-
-def helper(term: Term, mapping: dict) -> Term:
-    if is_variable(term.root):
-        if term.root not in mapping:
-            z = next(fresh_variable_name_generator)
-            mapping[term.root] = z
-        else:
-            z = mapping[term.root]
-        return Term(z)
-    if is_function(term.root):
-        args = [helper(arg, mapping) for arg in term.arguments]
-        return Term(term.root, args)
-
-
-print(skeleton(f, mapping))
-print(mapping)
-print(f.substitute({"x":Term("z1")}))
+# f = Formula.parse("plus(x,y)=plus(y,x)")
+# proof = syllogism_proof()
+# print(proof)
+# to_remove = Formula.parse("Man(aristotle)")
+# print("########################################################\n#############################################")
+# print(remove_assumption(proof, to_remove, True))
+#
+formula = Formula.parse('~(w=x|Aw[(Ex[(x=w&Aw[w=x])]->Ax[x=y])])')
+f, p = _uniquely_rename_quantified_variables(formula)
+print(f,p)
