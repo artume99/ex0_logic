@@ -191,17 +191,21 @@ def _uniquely_rename_quantified_variables(formula: Formula) -> \
     if is_quantifier(root):
         predicate_f, predicate_p = _uniquely_rename_quantified_variables(formula.predicate)
         new_formula, var, new_var = new_quantifier_formula(predicate_f, formula)
+
         conclusion = predicate_p.conclusion
         add = prover.add_proof(conclusion, predicate_p)
+
         prove_quantifier(formula, new_formula, predicate_f, var, new_var, prover, add)
     if is_binary(root):
         first_f, first_p = _uniquely_rename_quantified_variables(formula.first)
         second_f, second_p = _uniquely_rename_quantified_variables(formula.second)
         new_formula = Formula(root, first_f, second_f)
+
         conclusion = first_p.conclusion
         add_1 = prover.add_proof(conclusion, first_p)
         conclusion = second_p.conclusion
         add_2 = prover.add_proof(conclusion, second_p)
+
         add_equivalence_tau_implication(prover, formula, new_formula, {add_1, add_2})
     if is_unary(root):
         first_f, first_p = _uniquely_rename_quantified_variables(formula.first)
@@ -226,6 +230,7 @@ def prove_quantifier(formula: Formula, new_formula: Formula, predicate: Formula,
     use_axiom = prover.add_instantiated_assumption("({p}->{q})".format(p=p, q=q), assumption,
                                                    {"R": R, "Q": Q, "x": var, "y": new_var})
     mp = prover.add_mp(q, step, use_axiom)
+    return mp
 
 
 def add_equivalence_tau_implication(prover: Prover, formula1: Formula, formula2: Formula, steps: set):
@@ -283,12 +288,41 @@ def _pull_out_quantifications_across_negation(formula: Formula) -> \
         True
     """
     assert is_unary(formula.root)
+    assumptions = Prover.AXIOMS.union(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    prover = Prover(assumptions)
+    new_formula = formula
+    if is_quantifier(formula.first.root):
+        quant_dict = {"A": ["E", 14, 0], "E": ["A", 15, 1]}  # mapping the transition and the wanted axioms
+        quantifier = formula.first
+        var = quantifier.variable
+        new_quantifier = quant_dict[quantifier.root][0]
+        negative = Formula("~", quantifier.predicate)
+        new_predicate, proof = _pull_out_quantifications_across_negation(negative)
+        new_formula = Formula(new_quantifier, var, new_predicate)
+
+        conclusion = proof.conclusion
+        add = prover.add_proof(conclusion, proof)
+        negative_form = Formula(new_quantifier, var, negative)
+        mp = axiom_14_15_basic_proof(prover, negative, new_predicate, [negative_form, new_formula], var, new_quantifier,
+                                     add)
+
+        assumption = ADDITIONAL_QUANTIFICATION_AXIOMS[quant_dict[quantifier.root][2]]
+        R = quantifier.predicate.substitute({var: Term("_")})
+        formula_eq_to_negative = equivalence_of(formula, Formula(new_quantifier, var, negative))
+        use_axiom = prover.add_instantiated_assumption(formula_eq_to_negative, assumption, {"R": R, "x": var})
+
+        formula_eq_to_final = equivalence_of(formula, new_formula)
+        prover.add_tautological_implication(formula_eq_to_final, {mp, use_axiom})
+    else:
+        prover.add_tautology(equivalence_of(formula, formula))
+    return new_formula, prover.qed()
     # Task 11.6
 
 
-def _pull_out_quantifications_from_left_across_binary_operator(formula:
-Formula) -> \
-        Tuple[Formula, Proof]:
+LEFT_BINARY_AXIOM = {"A": {"&": 2, "|": 6, "->": 10}, "E": {"&": 3, "|": 7, "->": 11}}
+
+
+def _pull_out_quantifications_from_left_across_binary_operator(formula: Formula) -> Tuple[Formula, Proof]:
     """Converts the given formula with uniquely named variables of the form
     ``'(``\ `Q1`\ `x1`\ ``[``\ `Q2`\ `x2`\ ``[``...\ `Qn`\ `xn`\ ``[``\ `inner_first`\ ``]``...\ ``]]``\ `*`\ `second`\ ``)'``
     to an equivalent formula of the form
@@ -331,12 +365,44 @@ Formula) -> \
     """
     assert has_uniquely_named_variables(formula)
     assert is_binary(formula.root)
+    assumptions = Prover.AXIOMS.union(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    prover = Prover(assumptions)
+    new_formula = formula
+    if is_quantifier(formula.first.root):
+        quant_dict = {"A": ["E", 14], "E": ["A", 15]}  # mapping the transition and the wanted axioms
+        op = formula.root
+        quantifier = formula.first
+        var = quantifier.variable
+        new_quantifier_root = quant_dict[quantifier.root][0] if op == '->' else quantifier.root
+
+        to_prove = Formula(op, quantifier.predicate, formula.second)
+        predicate, proof = _pull_out_quantifications_from_left_across_binary_operator(to_prove)
+        new_formula = Formula(new_quantifier_root, var, predicate)
+        conclusion = proof.conclusion
+        add = prover.add_proof(conclusion, proof)
+        new_quantifier_form = Formula(new_quantifier_root, var, to_prove)
+        mp = axiom_14_15_basic_proof(prover, to_prove, predicate, [new_quantifier_form, new_formula], var,
+                                     new_quantifier_root, add)
+
+        formula_eq_to_new = equivalence_of(formula, new_quantifier_form)
+        assumption = ADDITIONAL_QUANTIFICATION_AXIOMS[LEFT_BINARY_AXIOM[quantifier.root][op]]
+        R = quantifier.predicate.substitute({var: Term("_")})
+        Q = formula.second
+        use_axiom = prover.add_instantiated_assumption(formula_eq_to_new, assumption, {"R": R, "Q": Q, "x": var})
+
+        formula_eq_to_new_formula = equivalence_of(formula, new_formula)
+        prover.add_tautological_implication(formula_eq_to_new_formula, {mp, use_axiom})
+    else:
+        prover.add_tautology(equivalence_of(formula, formula))
+    return new_formula, prover.qed()
+
     # Task 11.7.1
 
 
-def _pull_out_quantifications_from_right_across_binary_operator(formula:
-Formula) -> \
-        Tuple[Formula, Proof]:
+RIGHT_BINARY_AXIOM = {"A": {"&": 4, "|": 8, "->": 12}, "E": {"&": 5, "|": 9, "->": 13}}
+
+
+def _pull_out_quantifications_from_right_across_binary_operator(formula: Formula) -> Tuple[Formula, Proof]:
     """Converts the given formula with uniquely named variables of the form
     ``'(``\ `first`\ `*`\ `Q1`\ `x1`\ ``[``\ `Q2`\ `x2`\ ``[``...\ `Qn`\ `xn`\ ``[``\ `inner_second`\ ``]``...\ ``]])'``
     to an equivalent formula of the form
@@ -379,6 +445,35 @@ Formula) -> \
     """
     assert has_uniquely_named_variables(formula)
     assert is_binary(formula.root)
+    assumptions = Prover.AXIOMS.union(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    prover = Prover(assumptions)
+    new_formula = formula
+    if is_quantifier(formula.second.root):
+        op = formula.root
+        quantifier = formula.second
+        var = quantifier.variable
+        new_quantifier_root = quantifier.root
+
+        to_prove = Formula(op, formula.first, quantifier.predicate)
+        predicate, proof = _pull_out_quantifications_from_right_across_binary_operator(to_prove)
+        new_formula = Formula(new_quantifier_root, var, predicate)
+        new_quantifier_form = Formula(new_quantifier_root, var, to_prove)
+        conclusion = proof.conclusion
+        add = prover.add_proof(conclusion, proof)
+        mp = axiom_14_15_basic_proof(prover, to_prove, predicate, [new_quantifier_form, new_formula], var,
+                                     new_quantifier_root, add)
+
+        formula_eq_to_new = equivalence_of(formula, new_quantifier_form)
+        assumption = ADDITIONAL_QUANTIFICATION_AXIOMS[RIGHT_BINARY_AXIOM[quantifier.root][op]]
+        R = quantifier.predicate.substitute({var: Term("_")})
+        Q = formula.first
+        use_axiom = prover.add_instantiated_assumption(formula_eq_to_new, assumption, {"R": R, "Q": Q, "x": var})
+
+        formula_eq_to_new_formula = equivalence_of(formula, new_formula)
+        prover.add_tautological_implication(formula_eq_to_new_formula, {mp, use_axiom})
+    else:
+        prover.add_tautology(equivalence_of(formula, formula))
+    return new_formula, prover.qed()
     # Task 11.7.2
 
 
@@ -427,7 +522,53 @@ def _pull_out_quantifications_across_binary_operator(formula: Formula) -> \
     """
     assert has_uniquely_named_variables(formula)
     assert is_binary(formula.root)
+    assumptions = Prover.AXIOMS.union(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    prover = Prover(assumptions)
+    left_f, left_p = _pull_out_quantifications_from_left_across_binary_operator(formula)
+    conclusion = left_p.conclusion
+    add1 = prover.add_proof(conclusion, left_p)
+    inner_predicate, list_of_vars = get_inner_predicate(left_f)  # gets the deepest predicate with all the used vars
+
+    right_f, right_p = _pull_out_quantifications_from_right_across_binary_operator(inner_predicate)
+    conclusion = right_p.conclusion
+    add2 = prover.add_proof(conclusion, right_p)
+
+    for quantifier, var in list_of_vars:
+        add_quantifier_to_left = Formula(quantifier, var, inner_predicate)
+        add_quantifier_to_right = Formula(quantifier, var, right_f)
+        add2 = axiom_14_15_basic_proof(prover, inner_predicate, right_f,
+                                       [add_quantifier_to_left, add_quantifier_to_right], var, quantifier, add2)
+        inner_predicate = add_quantifier_to_left
+        right_f = add_quantifier_to_right
+    new_formula = right_f
+    prover.add_tautological_implication(equivalence_of(formula, new_formula), {add1, add2})
+
+    return new_formula, prover.qed()
     # Task 11.8
+
+
+def axiom_14_15_basic_proof(prover: Prover, r_formula: Formula, q_formula: Formula, eq_formulas: List[Formula],
+                            var: str, quantifier: str, last_step: int) -> int:
+    quant_dict = {"A": 14, "E": 15}  # mapping the wanted axioms
+    p = prover.qed().conclusion
+    q = equivalence_of(eq_formulas[0], eq_formulas[1])
+    R = r_formula.substitute({var: Term("_")})
+    Q = q_formula.substitute({var: Term("_")})
+    assumption = ADDITIONAL_QUANTIFICATION_AXIOMS[quant_dict[quantifier]]
+    use_axiom = prover.add_instantiated_assumption("({p}->{q})".format(p=p, q=q), assumption,
+                                                   {"R": R, "Q": Q, "x": var, "y": var})
+    mp = prover.add_mp(q, last_step, use_axiom)
+    return mp
+
+
+def get_inner_predicate(formula: Formula):
+    inner_predicate = formula
+    list_of_vars = []
+    while is_quantifier(inner_predicate.root):
+        list_of_vars.append([inner_predicate.root, inner_predicate.variable])
+        inner_predicate = inner_predicate.predicate
+    list_of_vars.reverse()
+    return inner_predicate, list_of_vars
 
 
 def _to_prenex_normal_form_from_uniquely_named_variables(formula: Formula) -> \

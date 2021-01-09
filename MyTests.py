@@ -10,7 +10,7 @@ from predicates.functions import _compile_term
 # from propositions.axiomatic_systems import *
 # from propositions.deduction_test import *
 # from propositions.tautology import *
-from predicates.prenex import _uniquely_rename_quantified_variables
+from predicates.prenex import _uniquely_rename_quantified_variables, _pull_out_quantifications_across_negation
 
 from predicates.prover import *
 from predicates.syntax import *
@@ -66,6 +66,7 @@ from predicates.prenex import *
 # print("########################################################\n#############################################")
 # print(remove_assumption(proof, to_remove, True))
 #
-formula = Formula.parse('~(w=x|Aw[(Ex[(x=w&Aw[w=x])]->Ax[x=y])])')
-f, p = _uniquely_rename_quantified_variables(formula)
-print(f,p)
+formula = Formula.parse('~Ax[Ey[R(x,y)]]')
+f, p = _pull_out_quantifications_across_negation(formula)
+print(f)
+print(p)
