@@ -54,17 +54,32 @@ ADDITIONAL_QUANTIFICATION_AXIOMS = (
 
 def is_quantifier_free(formula: Formula) -> bool:
     """Checks if the given formula contains any quantifiers.
-
     Parameters:
         formula: formula to check.
-
     Returns:
         ``False`` if the given formula contains any quantifiers, ``True``
         otherwise.
     """
-    stringed_formula = str(formula)
-    return not ('E' in stringed_formula or 'A' in stringed_formula)
     # Task 11.3.1
+    if is_quantifier(formula.root):
+        return False
+    elif is_binary(formula.root):
+        first_son = formula.first
+        second_son = formula.second
+        boolean_value = (is_quantifier_free(first_son)) and (
+            is_quantifier_free(second_son))
+        return boolean_value
+    elif is_unary(formula.root):
+        first_son = formula.first
+        boolean_value = (is_quantifier_free(first_son))
+        return boolean_value
+    elif is_relation(formula.root) | is_equality(formula.root):
+        boolean_value = [is_quantifier_free(arg) for arg in formula.arguments]
+        if False in boolean_value:
+            return False
+        return True
+    elif is_constant(formula.root) | is_variable(formula.root):
+        return True
 
 
 def is_in_prenex_normal_form(formula: Formula) -> bool:
@@ -576,10 +591,8 @@ def _to_prenex_normal_form_from_uniquely_named_variables(formula: Formula) -> \
     """Converts the given formula with uniquely named variables to an equivalent
     formula in prenex normal form, and proves the equivalence of these two
     formulas.
-
     Parameters:
         formula: formula with uniquely named variables to convert.
-
     Returns:
         A pair. The first element of the pair is a formula equivalent to the
         given formula, but in prenex normal form. The second element of the pair
@@ -588,7 +601,6 @@ def _to_prenex_normal_form_from_uniquely_named_variables(formula: Formula) -> \
         `equivalence_of`\ ``(``\ `formula`\ ``,``\ `returned_formula`\ ``)``)
         via `~predicates.prover.Prover.AXIOMS` and
         `ADDITIONAL_QUANTIFICATION_AXIOMS`.
-
     Examples:
         >>> formula = Formula.parse('(~(Ax[Ey[R(x,y)]]->Ez[P(1,z)])|S(w))')
         >>> returned_formula, proof = _to_prenex_normal_form_from_uniquely_named_variables(
@@ -606,15 +618,209 @@ def _to_prenex_normal_form_from_uniquely_named_variables(formula: Formula) -> \
     assert has_uniquely_named_variables(formula)
     # Task 11.9
 
+    root = formula.root
+
+    underscore = Term.parse("_")
+
+    assumptions = set(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    assumptions.union(set(Prover.AXIOMS))
+
+    new_proof = Prover(assumptions)
+    if is_binary(root):
+
+        first_son = formula.first
+        second_son = formula.second
+
+        first_son_sub, first_son_proof = \
+            _to_prenex_normal_form_from_uniquely_named_variables(
+                first_son)
+        second_son_sub, second_son_proof = \
+            _to_prenex_normal_form_from_uniquely_named_variables(
+                second_son)
+
+        sub_form, new_proof = binary_prenex_to_whole_prenex(new_proof,
+                                                            first_son_proof,
+                                                            first_son_sub,
+                                                            second_son_proof,
+                                                            second_son_sub,
+                                                            formula)
+        return sub_form, new_proof
+
+    elif is_unary(root):
+
+        first_son = formula.first
+        first_son_sub, first_son_proof = \
+            _to_prenex_normal_form_from_uniquely_named_variables(
+                first_son)
+        sub_form, new_proof = unary_prenex_to_whole_prenex(new_proof,
+                                                           first_son_proof,
+                                                           first_son_sub,
+                                                           formula)
+        return sub_form, new_proof
+    elif is_quantifier(root):
+        predicate = formula.predicate
+
+        sub_form, proof = _to_prenex_normal_form_from_uniquely_named_variables(
+            predicate)
+        replacement, new_proof = predicated_prenex_to_whole_quantified(
+            new_proof, proof,
+            sub_form,
+            formula)
+        return replacement, new_proof
+    else:
+        simple_proof_line = new_proof.add_tautology(equivalence_of(formula,
+                                                                   formula))
+        new_proof = new_proof.qed()
+        return formula, new_proof
+
+
+def predicated_prenex_to_whole_quantified(new_proof, unquantified_proof,
+                                          unquantified_sub_form,
+                                          formula):
+    """
+    method to turn predicate proof to quantified of predicate proof
+    Args:
+        new_proof: new proof to add to
+        unquantified_proof: predicate proof
+        unquantified_sub_form: predicate sub form
+        formula: origin formula
+    Returns: replacement formula and new proof
+    """
+    underscore = Term.parse("_")
+
+    root = formula.root
+    var = formula.variable
+    symbol = formula.root
+    var_sub_dict = {var: underscore}
+
+    proof_conclusion = unquantified_proof.conclusion
+    unquantified_proof_line = new_proof.add_proof(proof_conclusion,
+                                                  unquantified_proof)
+
+    if symbol == "A":
+        axiom = ADDITIONAL_QUANTIFICATION_AXIOMS[14]
+    else:
+        axiom = ADDITIONAL_QUANTIFICATION_AXIOMS[15]
+
+    R = proof_conclusion.first.first
+    Q = proof_conclusion.first.second
+
+    R_sub = R.substitute(var_sub_dict)
+    Q_sub = Q.substitute(var_sub_dict)
+
+    quantified_R = Formula(symbol, var, R)
+    quantified_Q = Formula(symbol, var, Q)
+
+    sub_map = {"R": R_sub,
+               "Q": Q_sub,
+               "x": var,
+               "y": var}
+
+    qR_to_qQ = Formula("->", quantified_R,
+                       quantified_Q)
+    qQ_to_qR = Formula("->", quantified_Q,
+                       quantified_R)
+    MP_formula = Formula("&", qR_to_qQ, qQ_to_qR)
+
+    axiom_form = Formula("->", proof_conclusion, MP_formula)
+    axiom_line = new_proof.add_instantiated_assumption(axiom_form,
+                                                       axiom,
+                                                       sub_map)
+
+    mp_index = new_proof.add_mp(MP_formula,
+                                unquantified_proof_line,
+                                axiom_line)
+
+    replacement = Formula(root, var, unquantified_sub_form)
+
+    new_proof = new_proof.qed()
+    return replacement, new_proof
+
+
+def unary_prenex_to_whole_prenex(new_proof,
+                                 first_son_proof, first_son_sub,
+                                 formula):
+    """
+    method to add two parts binary prenex to a whole prenex proof
+    Args:
+        new_proof: proof to add to
+        first_son_proof: first prenexed proof
+        first_son_sub: substituted formula given from first proof
+        formula: current formula
+    Returns: new sub form and whole proof
+    """
+    root = formula.root
+
+    first_son_con = first_son_proof.conclusion
+    unary_proof_line = new_proof.add_proof(first_son_con,
+                                           first_son_proof)
+
+    to_pull_out = Formula(root, first_son_sub)
+    sub_form, neg_proof = _pull_out_quantifications_across_negation(
+        to_pull_out)
+    neg_con = neg_proof.conclusion
+    neg_index = new_proof.add_proof(neg_con, neg_proof)
+
+    and_parts = equivalence_of(formula, to_pull_out)
+    form_is_like_neg = \
+        new_proof.add_tautological_implication(and_parts, {unary_proof_line})
+    and_parts = equivalence_of(formula, sub_form)
+    equivalence_line = new_proof.add_tautological_implication(
+        and_parts, {form_is_like_neg, neg_index})
+
+    new_proof = new_proof.qed()
+    return sub_form, new_proof
+
+
+def binary_prenex_to_whole_prenex(new_proof,
+                                  first_son_proof, first_son_sub,
+                                  second_son_proof, second_son_sub,
+                                  formula):
+    """
+    method to add two parts binary prenex to a whole prenex proof
+    Args:
+        new_proof: proof to add to
+        first_son_proof: first prenexed proof
+        first_son_sub: substituted formula given from first proof
+        second_son_proof: second prenexed proof
+        second_son_sub: substituted formula given from second proof
+        formula: current formula
+    Returns: new sub form and whole proof
+    """
+    root = formula.root
+
+    first_s_con = first_son_proof.conclusion
+    second_s_con = second_son_proof.conclusion
+
+    first_son_line = new_proof.add_proof(
+        first_s_con, first_son_proof)
+    second_son_line = new_proof.add_proof(
+        second_s_con, second_son_proof)
+
+    to_pull_out = Formula(root, first_son_sub, second_son_sub)
+    and_parts = equivalence_of(formula, to_pull_out)
+    form_to_binary_sub = new_proof.add_tautological_implication(
+        and_parts, {first_son_line, second_son_line})
+
+    sub_form, proof = _pull_out_quantifications_across_binary_operator(
+        to_pull_out)
+    binary_proof_line = new_proof.add_proof(proof.conclusion, proof)
+    and_parts = equivalence_of(formula, sub_form)
+
+    equivalence_line = \
+        new_proof.add_tautological_implication(and_parts,
+                                               {form_to_binary_sub,
+                                                binary_proof_line})
+    new_proof = new_proof.qed()
+    return sub_form, new_proof
+
 
 def to_prenex_normal_form(formula: Formula) -> Tuple[Formula, Proof]:
     """Converts the given formula to an equivalent formula in prenex normal
     form, and proves the equivalence of these two formulas.
-
     Parameters:
         formula: formula to convert, which contains no variable names starting
             with ``z``.
-
     Returns:
         A pair. The first element of the pair is a formula equivalent to the
         given formula, but in prenex normal form. The second element of the pair
@@ -623,7 +829,6 @@ def to_prenex_normal_form(formula: Formula) -> Tuple[Formula, Proof]:
         `equivalence_of`\ ``(``\ `formula`\ ``,``\ `returned_formula`\ ``)``)
         via `~predicates.prover.Prover.AXIOMS` and
         `ADDITIONAL_QUANTIFICATION_AXIOMS`.
-
     Examples:
         >>> formula = Formula.parse('~(w=x|Aw[(Ex[(x=w&Aw[w=x])]->Ax[x=y])])')
         >>> returned_formula, proof = to_prenex_normal_form(formula)
@@ -640,3 +845,23 @@ def to_prenex_normal_form(formula: Formula) -> Tuple[Formula, Proof]:
     for variable in formula.variables():
         assert variable[0] != 'z'
     # Task 11.10
+    assumptions = set(ADDITIONAL_QUANTIFICATION_AXIOMS)
+    assumptions.union(set(Prover.AXIOMS))
+
+    new_proof = Prover(assumptions)
+
+    unique_formula, sub_proof = _uniquely_rename_quantified_variables(formula)
+    uniquely_rename_proof_index = new_proof.add_proof(sub_proof.conclusion,
+                                                      sub_proof)
+
+    sub_form, proof = _to_prenex_normal_form_from_uniquely_named_variables(
+        unique_formula)
+    to_prenex_proof = new_proof.add_proof(proof.conclusion, proof)
+
+    equivalence_formula = equivalence_of(formula, sub_form)
+    new_proof.add_tautological_implication(equivalence_formula,
+                                           {uniquely_rename_proof_index,
+                                            to_prenex_proof})
+    new_proof = new_proof.qed()
+
+    return sub_form, new_proof

@@ -6,8 +6,10 @@
 
 """Building blocks for proving the Completeness Theorem for Predicate Logic."""
 
-from typing import AbstractSet, Container, Set, Union
-
+from typing import AbstractSet, Container, Set, Union, Iterable
+import collections
+import re
+from itertools import product
 from logic_utils import fresh_constant_name_generator
 
 from predicates.syntax import *
@@ -16,6 +18,7 @@ from predicates.proofs import *
 from predicates.prover import *
 from predicates.deduction import *
 from predicates.prenex import *
+
 
 def get_constants(formulas: AbstractSet[Formula]) -> Set[str]:
     """Finds all constant names in the given formulas.
@@ -30,6 +33,7 @@ def get_constants(formulas: AbstractSet[Formula]) -> Set[str]:
     for formula in formulas:
         constants.update(formula.constants())
     return constants
+
 
 def is_closed(sentences: AbstractSet[Formula]) -> bool:
     """Checks whether the given set of prenex-normal-form sentences is closed.
@@ -48,6 +52,7 @@ def is_closed(sentences: AbstractSet[Formula]) -> bool:
            is_universally_closed(sentences) and \
            is_existentially_closed(sentences)
 
+
 def is_primitively_closed(sentences: AbstractSet[Formula]) -> bool:
     """Checks whether the given set of prenex-normal-form sentences is
     primitively closed.
@@ -65,7 +70,51 @@ def is_primitively_closed(sentences: AbstractSet[Formula]) -> bool:
     for sentence in sentences:
         assert is_in_prenex_normal_form(sentence) and \
                len(sentence.free_variables()) == 0
+    sets = set_out_of_sentences_creator(sentences)
+    world = sets.world
+    relations = sets.relations
+    groups = create_permutation_dict(world, relations)
+    for relation_name, relation_arity in relations:
+        group = groups[relation_arity]
+        for a in group:
+            positive = Formula(relation_name, list(a))
+            negative = Formula("~", Formula(relation_name, list(a)))
+            if not (positive in sentences or negative in sentences):
+                return False
+    return True
+
     # Task 12.1.1
+
+
+def create_permutation_dict(world: Set[str], relations) -> Dict[int, Iterable]:
+    """
+    Creates a dictionary of products based on different repeats.
+    :param world:
+    :param relations:
+    :return:
+    """
+    group_dict = {}
+    for relation in relations:
+        arity = relation[1]
+        if arity in group_dict:
+            continue
+        group = product(world, repeat=arity)
+        group_dict[arity] = group
+    return group_dict
+
+
+def set_out_of_sentences_creator(sentences: AbstractSet[Formula]):
+    world = set()
+    relations = set()
+    quantifiers = set()
+    for formula in sentences:
+        world.update(formula.constants())
+        relations.update(formula.relations())
+        if is_quantifier(formula.root):
+            quantifiers.add(formula)
+    Sets = collections.namedtuple("Sentences_sets", 'world relations quantifiers')
+    return Sets(world, relations, quantifiers)
+
 
 def is_universally_closed(sentences: AbstractSet[Formula]) -> bool:
     """Checks whether the given set of prenex-normal-form sentences is
@@ -84,7 +133,22 @@ def is_universally_closed(sentences: AbstractSet[Formula]) -> bool:
     for sentence in sentences:
         assert is_in_prenex_normal_form(sentence) and \
                len(sentence.free_variables()) == 0
+    sets = set_out_of_sentences_creator(sentences)
+    world = sets.world
+    quantifiers = sets.quantifiers
+
+    universally = [quantifier for quantifier in quantifiers if quantifier.root == 'A']
+    for formula in universally:
+        predicate = formula.predicate
+        var = formula.variable
+        for c in world:
+            inst = predicate.substitute({var: Term(c)})
+            if inst not in sentences:
+                return False
+    return True
+
     # Task 12.1.2
+
 
 def is_existentially_closed(sentences: AbstractSet[Formula]) -> bool:
     """Checks whether the given set of prenex-normal-form sentences is
@@ -103,7 +167,27 @@ def is_existentially_closed(sentences: AbstractSet[Formula]) -> bool:
     for sentence in sentences:
         assert is_in_prenex_normal_form(sentence) and \
                len(sentence.free_variables()) == 0
+    sets = set_out_of_sentences_creator(sentences)
+    world = sets.world
+    quantifiers = sets.quantifiers
+    found = False
+
+    universally = [quantifier for quantifier in quantifiers if quantifier.root == 'E']
+    for formula in universally:
+        predicate = formula.predicate
+        var = formula.variable
+        for c in world:
+            inst = predicate.substitute({var: Term(c)})
+            if inst in sentences:
+                found = True
+                break
+        if not found:
+            return False
+        found = False
+    return True
+
     # Task 12.1.3
+
 
 def find_unsatisfied_quantifier_free_sentence(sentences: Container[Formula],
                                               model: Model[str],
@@ -142,7 +226,25 @@ def find_unsatisfied_quantifier_free_sentence(sentences: Container[Formula],
     assert len(unsatisfied.free_variables()) == 0
     assert unsatisfied in sentences
     assert not model.evaluate_formula(unsatisfied)
+
+    universe = model.universe
+    root = unsatisfied.root
+    if root == 'A':
+        for c in universe:
+            var = unsatisfied.variable
+            unsatisfied_new = unsatisfied.predicate.substitute({var: Term(c)})
+            if not model.evaluate_formula(unsatisfied_new):
+                return find_unsatisfied_quantifier_free_sentence(sentences, model, unsatisfied_new)
+    elif root == 'E':
+        for c in universe:
+            var = unsatisfied.variable
+            unsatisfied_new = unsatisfied.predicate.substitute({var: Term(c)})
+            if unsatisfied_new in sentences:
+                return find_unsatisfied_quantifier_free_sentence(sentences, model, unsatisfied_new)
+    return unsatisfied
+
     # Task 12.2
+
 
 def get_primitives(quantifier_free: Formula) -> Set[Formula]:
     """Finds all primitive subformulas of the given quantifier-free formula.
@@ -160,7 +262,26 @@ def get_primitives(quantifier_free: Formula) -> Set[Formula]:
         ``'R(c1,d)'``, ``'Q(c1)'``, and ``'R(c2,a)'``.
     """
     assert is_quantifier_free(quantifier_free)
+    # ______________________ A SOLUTION USING REGEX, JUST FOR FUN ___________________ #
+    # pattern = "(\w+\([^)]*\))"
+    # primitive = set()
+    # for match in re.finditer(pattern, str(quantifier_free)):
+    #     primitive.add(Formula.parse(match.string))
+    # return primitive
+    # _____________________ SOLUTION WITHOUT REGEX __________________________________ #
+    primitive = set()
+    root = quantifier_free.root
+    if is_binary(root):
+        primitive.update(get_primitives(quantifier_free.first))
+        primitive.update(get_primitives(quantifier_free.second))
+    elif is_unary(root):
+        primitive.update(get_primitives(quantifier_free.first))
+    elif is_relation(root):
+        primitive.update({quantifier_free})
+    return primitive
+
     # Task 12.3.1
+
 
 def model_or_inconsistency(sentences: AbstractSet[Formula]) -> \
         Union[Model[str], Proof]:
@@ -175,9 +296,69 @@ def model_or_inconsistency(sentences: AbstractSet[Formula]) -> \
         A model in which all of the given sentences hold if such exists,
         otherwise a valid proof of  a contradiction from the given formulas via
         `~predicates.prover.Prover.AXIOMS`.
-    """    
+    """
     assert is_closed(sentences)
+    constants = get_constants(sentences)
+    constants_meanings = dict(zip(constants, constants))
+    relation_meanings = create_relation_meanings(sentences)
+    model = Model(constants, constants_meanings, relation_meanings)
+
+    for sentence in sentences:
+        if not model.evaluate_formula(sentence):
+            unsatisfied = find_unsatisfied_quantifier_free_sentence(sentences, model, sentence)
+            proof = prove_contradiction(unsatisfied, sentences)
+            return proof
+    return model
+
     # Task 12.3.2
+
+
+def prove_contradiction(unsatisfied: Formula, sentences: AbstractSet[Formula]) -> Proof:
+    """
+    proves that contradiction of (p&q)&(~q&p) (always false)
+    :param unsatisfied:
+    :param sentences:
+    :return:
+    """
+    assumptions = Prover.AXIOMS.union(sentences)
+    prover = Prover(assumptions)
+    step1 = prover.add_assumption(unsatisfied)
+    primitives = get_primitives(unsatisfied)
+
+    steps = {step1}
+    abs_primitives = list()
+    for primitive in primitives:
+        primitive_in_sentences = primitive if (primitive in sentences) else Formula("~", primitive)
+        abs_primitives.append(primitive_in_sentences)
+        steps.add(prover.add_assumption(primitive_in_sentences))
+    unsatisfied_and_assumptions = add_and_to_assumptions(unsatisfied, abs_primitives)
+    prover.add_tautological_implication(unsatisfied_and_assumptions, steps)  # (p&q)&(~q&p)
+
+    return prover.qed()
+
+
+def add_and_to_assumptions(unsatisfied, primitives: List[Formula]) -> Formula:
+    if len(primitives) == 1:
+        return Formula('&', unsatisfied, primitives[0])
+    return Formula("&", unsatisfied, add_and_to_assumptions(primitives[0], primitives[1:]))
+
+
+def create_relation_meanings(formulas: AbstractSet[Formula]):
+    relation_meanings = {}
+    for formula in formulas:
+        if not is_relation(formula.root):
+            continue
+        primitive = get_primitives(formula)
+        for p in primitive:
+            if p not in formulas:
+                continue
+            name = p.root
+            args = [str(arg) for arg in p.arguments]
+            if name not in relation_meanings:
+                relation_meanings[name] = set()
+            relation_meanings[name].add(tuple(args))
+    return relation_meanings
+
 
 def combine_contradictions(proof_from_affirmation: Proof,
                            proof_from_negation: Proof) -> Proof:
@@ -221,6 +402,7 @@ def combine_contradictions(proof_from_affirmation: Proof,
         assert len(assumption.formula.free_variables()) == 0
     # Task 12.4
 
+
 def eliminate_universal_instantiation_assumption(proof: Proof, constant: str,
                                                  instantiation: Formula,
                                                  universal: Formula) -> Proof:
@@ -253,6 +435,7 @@ def eliminate_universal_instantiation_assumption(proof: Proof, constant: str,
         assert len(assumption.formula.free_variables()) == 0
     # Task 12.5
 
+
 def universal_closure_step(sentences: AbstractSet[Formula]) -> Set[Formula]:
     """Augments the given sentences with all universal instantiations of each
     universally quantified sentence from these sentences, with respect to all
@@ -272,6 +455,7 @@ def universal_closure_step(sentences: AbstractSet[Formula]) -> Set[Formula]:
         assert is_in_prenex_normal_form(sentence) and \
                len(sentence.free_variables()) == 0
     # Task 12.6
+
 
 def replace_constant(proof: Proof, constant: str, variable: str = 'zz') -> \
         Proof:
@@ -299,6 +483,7 @@ def replace_constant(proof: Proof, constant: str, variable: str = 'zz') -> \
     for line in proof.lines:
         assert variable not in line.formula.variables()
     # Task 12.7.1
+
 
 def eliminate_existential_witness_assumption(proof: Proof, constant: str,
                                              witness: Formula,
@@ -337,6 +522,7 @@ def eliminate_existential_witness_assumption(proof: Proof, constant: str,
     for assumption in proof.assumptions.difference({Schema(witness)}):
         assert constant not in assumption.formula.constants()
     # Task 12.7.2
+
 
 def existential_closure_step(sentences: AbstractSet[Formula]) -> Set[Formula]:
     """Augments the given sentences with an existential witness that uses a new
